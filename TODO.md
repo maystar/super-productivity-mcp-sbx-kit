@@ -230,6 +230,20 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
         den Server jetzt tatsächlich sofort sieht (nur die einzelnen Befehle isoliert verifiziert,
         nicht der volle `setup.install`-Ablauf beim echten Sandbox-Erstellen) — vor dem nächsten
         `sbx run` gegenprüfen.
+- [x] **11. Setup-Skript aus spec.yaml ausgelagert** (2026-09-15) — Die Registrierungslogik war
+      zweimal fast identisch inline in `setup.install` und `setup.startup` dupliziert. Jetzt als
+      eine gemeinsame Datei `files/home/.super-productivity-mcp/setup.sh` (nimmt den Phasen-Tag
+      `install`/`startup` als Argument, nur fürs Log relevant), gemäß dem Kit-`files`-Mechanismus
+      (`docs.docker.com/ai/sandboxes/customize/kits/`, Zitat zur Reihenfolge: *"2. Static files
+      under `files/home/`. 3. `setup.install` commands, in declaration order."*) — landet also
+      **vor** `setup.install` unter `/home/agent/.super-productivity-mcp/setup.sh` (Standard-
+      Permission `0644`, daher Aufruf explizit mit `sh <Pfad> <Tag>` statt per Shebang/exec-Bit).
+      `spec.yaml`s `install`/`startup`-Einträge rufen jetzt nur noch dieses eine Skript auf.
+      Verifiziert: Skript lokal nach `$HOME` kopiert und zweimal (`install`, `startup`)
+      nacheinander aufgerufen — beide Tags erscheinen korrekt im gemeinsamen Log,
+      `claude mcp list` zeigt danach weiterhin `✔ Connected`. **Noch nicht getestet:** der
+      tatsächliche Kopiervorgang durch `sbx` selbst bei einem echten `sbx run`/`sbx kit add`
+      (nur die Kopie von Hand simuliert, s. o.).
 
 ---
 

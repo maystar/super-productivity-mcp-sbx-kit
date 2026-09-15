@@ -16,55 +16,28 @@ permissions:
       - ghcr.io:443
 
 setup:
+  # The actual registration logic lives in files/home/.super-productivity-mcp/setup.sh (copied to
+  # /home/agent/.super-productivity-mcp/setup.sh before setup.install runs, per the kit files
+  # mechanism: https://docs.docker.com/ai/sandboxes/customize/kits/). Called with an explicit
+  # interpreter (`sh`) so the copied file's default 0644 permissions are enough — no chmod needed.
+  #
   # Runs once, synchronously, during sandbox creation — completes before the agent's first
   # session starts, so that session already sees the registered MCP server.
   install:
     - command:
         - sh
-        - -c
-        - |
-          set -u
-          exec >>"$HOME/.cache/super-productivity-mcp-setup.log" 2>&1
-          mkdir -p "$HOME/.cache"
-          printf '=== install %s ===\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-          export PATH="$HOME/.local/bin:$HOME/.claude/local:$PATH"
-          IMAGE="ghcr.io/maystar/super-productivity-rest-mcp:latest"
-          docker pull "$IMAGE" || echo "WARNING: docker pull (install) failed, docker run will pull on demand"
-          claude mcp remove super-productivity --scope user >/dev/null 2>&1 || true
-          claude mcp add super-productivity --scope user -- \
-            docker run -i --rm \
-              -e SP_REST_TOKEN -e SP_REST_BASE_URL \
-              -e HTTP_PROXY -e HTTPS_PROXY -e NO_PROXY \
-              -e http_proxy -e https_proxy -e no_proxy \
-              -e NODE_USE_ENV_PROXY \
-              "$IMAGE" \
-            || echo "ERROR: claude mcp add (install) failed"
+        - /home/agent/.super-productivity-mcp/setup.sh
+        - install
       user: "1000"
       background: false
       description: "Register the MCP server once, during sandbox creation"
-  # Runs on every subsequent sandbox start, to self-heal and keep the image current.
-  # Registration runs before the pull to minimize the race with the agent's own startup.
+  # Runs on every subsequent sandbox start, to self-heal and keep the image current. The agent
+  # never waits for this to finish (see setup.sh's header comment), unlike setup.install above.
   startup:
     - command:
         - sh
-        - -c
-        - |
-          set -u
-          exec >>"$HOME/.cache/super-productivity-mcp-setup.log" 2>&1
-          mkdir -p "$HOME/.cache"
-          printf '=== startup %s ===\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-          export PATH="$HOME/.local/bin:$HOME/.claude/local:$PATH"
-          IMAGE="ghcr.io/maystar/super-productivity-rest-mcp:latest"
-          claude mcp remove super-productivity --scope user >/dev/null 2>&1 || true
-          claude mcp add super-productivity --scope user -- \
-            docker run -i --rm \
-              -e SP_REST_TOKEN -e SP_REST_BASE_URL \
-              -e HTTP_PROXY -e HTTPS_PROXY -e NO_PROXY \
-              -e http_proxy -e https_proxy -e no_proxy \
-              -e NODE_USE_ENV_PROXY \
-              "$IMAGE" \
-            || echo "ERROR: claude mcp add (startup) failed"
-          docker pull "$IMAGE" || echo "WARNING: docker pull (startup) failed, docker run will pull on demand"
+        - /home/agent/.super-productivity-mcp/setup.sh
+        - startup
       user: "1000"
       background: false
       description: "Re-register the MCP server on every subsequent sandbox start"
