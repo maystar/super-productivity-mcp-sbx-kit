@@ -48,44 +48,48 @@ Konnektivitätstest in Schritt 6 der TODO.md, aber für alles danach):
 Dieses Verzeichnis dient hier **sowohl als Kit-Quelle als auch als Sandbox-Workdir** (anders als
 beim verworfenen Vorgänger-Ansatz, wo beides getrennt war — für den aktuellen Test/Entwicklungsstand
 ist das bewusst so gewählt, damit der Kit direkt aus der laufenden Sandbox heraus weiterentwickelt
-werden kann). Sandbox-Name ist fest auf `sp-rest-mcp` gesetzt (nicht mehr frei wählbar) — nur so
-lässt sich das Secret unten eindeutig genau dieser Sandbox zuordnen.
+werden kann). Name und Token werden beim Ausführen interaktiv abgefragt (Token-Eingabe ohne
+Echo) und danach in beiden Aufrufen (`secret set-custom` und `run`) konsistent verwendet — so
+bleibt sichergestellt, dass das Secret an genau die Sandbox gebunden ist, die tatsächlich gestartet
+wird.
 
 ### 1. Access Token in Super Productivity holen
 
 Settings → Misc → **Enable local REST API** aktivieren, falls noch nicht geschehen, dann den dort
 angezeigten **Access Token** kopieren.
 
-### 2. Token als Secret registrieren (Host-Kommando, vor `sbx run`)
+### 2. Secret setzen + Sandbox starten
 
 ```bash
-sbx secret set-custom --sandbox sp-rest-mcp --host host.docker.internal --env SP_REST_TOKEN --value "<dein-access-token>"
+read -rp "Sandbox-Name [sp-rest-mcp]: " SBX_NAME
+SBX_NAME="${SBX_NAME:-sp-rest-mcp}"
+read -rsp "Super Productivity Access Token: " SP_TOKEN
+echo
+
+sbx secret set-custom --sandbox "$SBX_NAME" --host host.docker.internal --env SP_REST_TOKEN --value "$SP_TOKEN"
+
+cd /home/fabian/claude-workspace/super-productivity
+sbx run claude --name "$SBX_NAME" \
+  --kit ./kits/super-productivity-rest-mcp \
+  .
 ```
 
-Wie das wirkt (Platzhalter-Mechanismus, siehe [docs.docker.com – Custom Secrets](https://docs.docker.com/reference/cli/sbx/secret/set-custom/)):
+Wie das Secret wirkt (Platzhalter-Mechanismus, siehe [docs.docker.com – Custom Secrets](https://docs.docker.com/reference/cli/sbx/secret/set-custom/)):
 Die Sandbox sieht in `$SP_REST_TOKEN` nur einen **Platzhalter**, nicht den echten Token. Erst wenn
 ein Request aus der Sandbox tatsächlich an den Host `host.docker.internal` geht, ersetzt der
 sbx-Proxy den Platzhalter im Request (z. B. im `Authorization`-Header) durch den echten Wert. Der
-Token liegt damit nie im Klartext im Kit, im Repo oder im Sandbox-Dateisystem.
+Token liegt damit nie im Klartext im Kit, im Repo oder im Sandbox-Dateisystem — und dank `read -rs`
+auch nicht in der Shell-History.
 
 ⚠️ **Unverifiziert** (kein `sbx`-Zugriff von hier aus möglich):
 - Ob `--host host.docker.internal` das Richtige ist, oder ob (analog zur Netzwerk-Policy, die
   denselben Zugriff intern als Domain `localhost:3876` geloggt hat) stattdessen `--host localhost`
   nötig ist.
 - Ob das Secret **vor** `sbx run` gesetzt sein muss, damit die Sandbox es beim Start sieht, oder ob
-  es auch nachträglich funktioniert.
+  es auch nachträglich funktioniert (der Block oben setzt es vorsichtshalber zuerst).
 
 Beides in Schritt 6/7 der [TODO.md](./TODO.md) mit der echten Sandbox verifizieren; bei Fehlschlag
-den `--host`-Wert tauschen bzw. den Befehl nach dem `sbx run` unten erneut ausführen.
-
-### 3. Sandbox erstellen
-
-```bash
-cd /home/fabian/claude-workspace/super-productivity
-sbx run claude --name sp-rest-mcp \
-  --kit ./kits/super-productivity-rest-mcp \
-  .
-```
+den `--host`-Wert tauschen bzw. den `secret set-custom`-Befehl erneut ausführen.
 
 Kein zweiter Mount-Pfad nötig (anders als beim alten Ansatz) — die REST API braucht kein
 gemountetes Host-Verzeichnis, nur die Netzwerkfreigabe aus dem Kit.
