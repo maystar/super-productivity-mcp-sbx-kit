@@ -1,23 +1,27 @@
-schemaVersion: "1"
+schemaVersion: "2"
 kind: mixin
 name: super-productivity-rest-mcp
 displayName: Super Productivity REST API Access
 description: >-
-  Platzhalter-Kit für den Zugriff auf die Super Productivity Local REST API
-  (läuft auf dem Host unter 127.0.0.1:3876, erreicht via host.docker.internal).
-  Aktuell ohne eigene Setup-Logik — die Netzwerkfreigabe passiert separat über
-  `sbx policy allow network` (siehe README.md), NICHT deklarativ im Kit (siehe
-  Hinweis unten). Der MCP-Server ist ein noch folgender Ausbauschritt (TODO.md
-  Schritt 7); sobald der Setup-Schritte braucht, kommen die hier rein.
+  Gibt der Sandbox Netzwerkzugriff auf die Super Productivity Local REST API,
+  die auf dem Host unter 127.0.0.1:3876 läuft (erreicht via host.docker.internal).
+  Aktueller Stand: reine Netzwerkfreigabe zum Verifizieren der Erreichbarkeit.
+  Der eigentliche MCP-Server (der die REST-Endpunkte als Claude-Code-Tools kapselt)
+  ist ein noch folgender Ausbauschritt, siehe TODO.md.
 
-# KORREKTUR (2026-09-14): Diese Datei enthielt zuvor einen `permissions.network.allow`-
-# Block, angelehnt an eine WebFetch-Zusammenfassung von docs.docker.com/ai/sandboxes/
-# customize/kit-reference.md. Der bei dir installierte `sbx` lehnt das mit
-# "field permissions not found in type spec.SpecFile" ab — das Feld existiert in dieser
-# sbx-Version schlüssig nicht. Netzwerkfreigabe läuft stattdessen über das separate,
-# in unseren Projekt-Instruktionen mit Sicherheit dokumentierte Host-Kommando
-# `sbx policy allow network <domain>[,<domain>…]` (siehe README.md). Für Schritt 7
-# (setup/install/files im Kit) ist ebenfalls noch offen, ob das dort vermutete Schema
-# (`setup: install:`/`files:`) stimmt — siehe TODO.md, dort wird vor Schritt 7 die
-# tatsächliche Schema-Referenz deiner sbx-Version eingeholt (z.B. via `sbx kit --help`),
-# statt erneut auf ungeprüfte Doku-Zusammenfassungen zu vertrauen.
+# Hinweis: Der ursprüngliche Versuch mit schemaVersion "1" scheiterte am echten sbx mit
+# "field permissions not found in type spec.SpecFile" — nicht weil das Feld grundsätzlich
+# nicht existiert (der Nutzer verwendet permissions.network.allow bereits erfolgreich in
+# anderen Kits), sondern weil es offenbar erst ab schemaVersion "2" Teil des Schemas ist.
+#
+# ⚠️ Weiterhin unverifiziert (kein sbx-Zugriff von hier aus möglich): Ob die Allow-Liste
+# intern gegen "host.docker.internal:<port>" oder "localhost:<port>" matcht. Ein früherer
+# Testaufruf (curl http://host.docker.internal:3876 aus einer anderen Sandbox) wurde von der
+# Netzwerk-Policy als Domain "localhost:3876" geloggt/geblockt — nicht als
+# "host.docker.internal:3876". Deshalb sind unten beide Varianten eingetragen; nach dem
+# ersten echten Test (TODO.md Schritt 6) auf die tatsächlich wirksame Variante kürzen.
+permissions:
+  network:
+    allow:
+      - host.docker.internal:3876
+      - localhost:3876

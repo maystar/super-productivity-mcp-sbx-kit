@@ -23,12 +23,12 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
 
 - [x] **1. Aufräumen** — altes Kit (dateibasierter IPC-Ansatz) entfernt, TODO.md/README.md neu aufgesetzt
 - [x] **2. TODO.md** — diese Datei
-- [x] **3. Kit + Netzwerkfreigabe** — **korrigiert nach echtem Testlauf:** `permissions.network.allow`
-      im Kit existiert in der installierten sbx-Version nicht (`sbx run` schlug fehl mit
-      `field permissions not found in type spec.SpecFile`). [spec.yaml](./kits/super-productivity-rest-mcp/spec.yaml)
-      ist jetzt auf reine Metadaten reduziert; die Freigabe passiert stattdessen über das separate
-      Host-Kommando `sbx policy allow network ...` (README.md, Schritt 2 — eingebaut in denselben
-      Copy-Paste-Block wie Secret + `sbx run`)
+- [x] **3. Kit mit Netzwerkfreigaben definieren** — [kits/super-productivity-rest-mcp/spec.yaml](./kits/super-productivity-rest-mcp/spec.yaml),
+      nutzt `permissions.network.allow` (deklarativ, kein manuelles `sbx policy allow` nötig). Ein
+      erster Testlauf schlug fehl (`field permissions not found in type spec.SpecFile`) — Ursache
+      war `schemaVersion: "1"`; das Feld existiert erst ab `schemaVersion: "2"`, mit der der Nutzer
+      dieses Feld in anderen Kits bereits erfolgreich verwendet. Auf `"2"` korrigiert. Weiterhin
+      offen: `host.docker.internal:3876` vs. `localhost:3876` (siehe Warnhinweis in der Datei)
 - [x] **4. README.md** — Sandbox-Start, Zweck, Host-Voraussetzungen dokumentiert
 - [ ] **5. Sandbox starten** — **Aktion beim Nutzer**, mit diesem Verzeichnis als Kit-Quelle **und**
       Workdir, fester Name `sp-rest-mcp` (Befehle siehe README.md, Abschnitt "Sandbox mit diesem
@@ -37,18 +37,16 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
 - [ ] **6. Erreichbarkeit testen** — **Aktion für einen Agenten innerhalb der neuen Sandbox**:
       - `curl http://host.docker.internal:3876/health` → sollte `{"ok":true,"data":{"server":"up","rendererReady":true}}` liefern (unauthentifiziert, einziger offener Endpunkt)
       - Falls `403`/Policy-Block: prüfen, welcher Domain-Name in der Fehlermeldung steht
-        (`host.docker.internal:3876` oder `localhost:3876`) und den `sbx policy allow network`-Aufruf
-        in README.md entsprechend anpassen/kürzen
+        (`host.docker.internal:3876` oder `localhost:3876`) und `spec.yaml` entsprechend anpassen/kürzen
       - Falls Connection-Error (nicht Policy-Block): prüfen, ob Super Productivity läuft und die
         REST API in den Settings aktiviert ist (siehe README.md, Abschnitt "Host-Voraussetzungen")
 - [ ] **7. MCP-Server entwickeln und ins Kit integrieren** — **Aktion für einen Agenten innerhalb
       der Sandbox** (oder hier, sobald Schritt 6 grün ist), u. a.:
-      - **Zuerst das reale Kit-Schema verifizieren**, bevor `setup:`/`commands:`/`files:` in
-        `spec.yaml` ergänzt werden — dieselbe Doku-Quelle, die `permissions.network.allow`
-        fälschlich behauptet hat, ist auch die Quelle für die bisherige Annahme `setup: install:`
-        statt `commands: install:`. Z. B. `sbx kit --help` bzw. `sbx run --help` in der Sandbox
-        ausführen und/oder ein minimales Test-Kit mit `setup:` probeweise laden, bevor die
-        eigentliche Logik reinkommt.
+      - **Vorher kurz prüfen, ob `setup:`/`commands:`/`files:` (Schlüsselnamen UND ob sie ggf.
+        auch an `schemaVersion` gebunden sind) zur tatsächlich installierten sbx-Version passen** —
+        siehe Lehre aus Schritt 3 (`permissions.network.allow` brauchte `schemaVersion: "2"`, nicht
+        `"1"`). Im Zweifel `sbx kit --help` prüfen oder mit einem minimalen Test-Kit ausprobieren,
+        bevor die eigentliche Install-Logik reinkommt.
       - Token-Übergabe ist bereits in README.md Schritt 2 definiert (`sbx secret set-custom`,
         Platzhalter-Mechanismus, `$SP_REST_TOKEN`) — **Host-Aktion**, idealerweise schon vor/bei
         Schritt 5 erledigt, damit die Sandbox dafür nicht neu erstellt werden muss
@@ -76,16 +74,14 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
 ---
 
 ## Offene Annahmen / bei Abweichung anpassen
-- **Widerlegt (2026-09-14):** `permissions.network.allow` im Kit-Spec — existiert in der
-  installierten sbx-Version nicht (`field permissions not found in type spec.SpecFile`). Ersetzt
-  durch `sbx policy allow network` als Host-Kommando (README.md).
+- **Geklärt (2026-09-14):** `permissions.network.allow` ist gültig, brauchte aber
+  `schemaVersion: "2"` statt `"1"` (aus der alten Anleitung übernommen, ohne die Versionsbindung
+  zu prüfen). Auf `"2"` korrigiert.
 - Unklar, ob die Netzwerk-Policy intern auf `host.docker.internal:<port>` oder `localhost:<port>`
-  matcht — wird in Schritt 6 verifiziert.
+  matcht (siehe Warnhinweis in `spec.yaml`) — wird in Schritt 6 verifiziert.
 - Unklar, ob `sbx secret set-custom --host host.docker.internal ...` (README.md Schritt 2) so
   funktioniert oder `--host localhost` nötig ist, und ob das Secret vor `sbx run` gesetzt sein muss
   — wird in Schritt 6/7 verifiziert.
-- **Wichtig für Schritt 7:** Die Docker-Sandboxes-Kit-Referenz von docs.docker.com hat sich bereits
-  einmal als nicht deckungsgleich mit der real installierten sbx-Version erwiesen (s.o.). Das
-  vermutete `setup: install:`/`files:`-Schema für Schritt 7 ist daher **ebenfalls unverifiziert**
-  und sollte vor der Implementierung gegen die echte Sandbox getestet werden (kleines Test-Kit
-  zuerst), statt der Doku blind zu vertrauen. Kits sind laut Docker offiziell "experimentell".
+- Kits sind laut Docker-Doku "experimentell" — Schema-Details können an `schemaVersion` gebunden
+  sein (s.o.); bei Fehlern in Schritt 7 (`setup:`/`commands:`/`files:`) zuerst dort ansetzen, statt
+  am Feldnamen selbst zu zweifeln.
