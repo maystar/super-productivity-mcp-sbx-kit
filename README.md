@@ -68,4 +68,7 @@ den aktuellen Schritt (Konnektivitätstest) erwartet und normal.
 ## Weiteres Vorgehen
 
 Siehe [TODO.md](./TODO.md) für den vollständigen Plan (Schritt 6: Erreichbarkeit testen,
-Schritt 7: MCP-Server entwickeln und ins Kit integrieren).
+Schritt 7: MCP-Server entwickeln und ins Kit integrieren). Für Schritt 7 liegt die
+API-Referenz (Endpunkte, Felder, Fehlercodes) bereits lokal vor:
+[docs/rest-api-reference.md](./docs/rest-api-reference.md) — nötig, weil ein Agent innerhalb der
+Sandbox keinen Zugriff auf das Gespräch hat, in dem diese Referenz recherchiert wurde.

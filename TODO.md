@@ -14,6 +14,10 @@ Git-Commit `e275fba` sowie [super-productivity-sbx-kit-in-sandbox.md](./super-pr
 (nur noch historische Referenz, **nicht mehr aktueller Plan**).
 
 Details zur aktuellen Architektur und was eine Sandbox mit dem Kit schon kann: [README.md](./README.md).
+API-Endpunkte/Felder/Fehlercodes für Schritt 7 (**bereits recherchiert, lokal abgelegt** — ein
+Agent in der Sandbox hat keinen Zugriff auf dieses Gespräch und müsste die GitHub-Wiki-Seite sonst
+selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte):
+[docs/rest-api-reference.md](./docs/rest-api-reference.md).
 
 ## Plan (mit dem Nutzer abgestimmt)
 
@@ -37,7 +41,9 @@ Details zur aktuellen Architektur und was eine Sandbox mit dem Kit schon kann: [
       - Token in die Sandbox bringen — geplant: `sbx secret set-custom` (Platzhalter-Mechanismus,
         Token landet nie im Klartext im Kit/Repo) — **Host-Aktion**
       - MCP-Server schreiben, der die REST-Endpunkte (Tasks CRUD, task-control, focus, projects,
-        tags) als Claude-Code-Tools kapselt
+        tags) als Claude-Code-Tools kapselt — Endpunkt-/Feld-Details siehe
+        [docs/rest-api-reference.md](./docs/rest-api-reference.md) (vor der Implementierung kurz
+        gegen die Live-Wiki-Seite gegenprüfen, siehe Hinweis am Anfang der Datei)
       - Server user-scoped in `~/.claude.json` der Sandbox registrieren (analog zum vorherigen
         Ansatz, aber ohne Host-HOME-Ableitung — hier reicht eine feste Basis-URL)
       - Mit `/mcp` und echten Testaufrufen verifizieren
