@@ -28,7 +28,9 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
       Warnhinweis in der Datei zur noch unklaren Frage `host.docker.internal:3876` vs. `localhost:3876`)
 - [x] **4. README.md** — Sandbox-Start, Zweck, Host-Voraussetzungen dokumentiert
 - [ ] **5. Sandbox starten** — **Aktion beim Nutzer**, mit diesem Verzeichnis als Kit-Quelle **und**
-      Workdir (Befehl siehe README.md, Abschnitt "Sandbox mit diesem Kit starten")
+      Workdir, fester Name `sp-rest-mcp` (Befehle siehe README.md, Abschnitt "Sandbox mit diesem
+      Kit starten" — inkl. Token/Secret-Übergabe, die dort jetzt konkret definiert ist statt nur
+      "geplant")
 - [ ] **6. Erreichbarkeit testen** — **Aktion für einen Agenten innerhalb der neuen Sandbox**:
       - `curl http://host.docker.internal:3876/health` → sollte `{"ok":true,"data":{"server":"up","rendererReady":true}}` liefern (unauthentifiziert, einziger offener Endpunkt)
       - Falls `403`/Policy-Block: prüfen, welcher Domain-Name in der Fehlermeldung steht
@@ -37,9 +39,9 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
         REST API in den Settings aktiviert ist (siehe README.md, Abschnitt "Host-Voraussetzungen")
 - [ ] **7. MCP-Server entwickeln und ins Kit integrieren** — **Aktion für einen Agenten innerhalb
       der Sandbox** (oder hier, sobald Schritt 6 grün ist), u. a.:
-      - Access Token aus Super Productivity (Settings → Misc) beschaffen
-      - Token in die Sandbox bringen — geplant: `sbx secret set-custom` (Platzhalter-Mechanismus,
-        Token landet nie im Klartext im Kit/Repo) — **Host-Aktion**
+      - Token-Übergabe ist bereits in README.md Schritt 2 definiert (`sbx secret set-custom`,
+        Platzhalter-Mechanismus, `$SP_REST_TOKEN`) — **Host-Aktion**, idealerweise schon vor/bei
+        Schritt 5 erledigt, damit die Sandbox dafür nicht neu erstellt werden muss
       - MCP-Server schreiben, der die REST-Endpunkte (Tasks CRUD, task-control, focus, projects,
         tags) als Claude-Code-Tools kapselt — Endpunkt-/Feld-Details siehe
         [docs/rest-api-reference.md](./docs/rest-api-reference.md) (vor der Implementierung kurz
@@ -66,7 +68,8 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
 ## Offene Annahmen / bei Abweichung anpassen
 - Unklar, ob die Netzwerk-Policy intern auf `host.docker.internal:<port>` oder `localhost:<port>`
   matcht (siehe Warnhinweis in `spec.yaml`) — wird in Schritt 6 verifiziert.
-- Unklar, ob `sbx secret set-custom --host <host> --env <NAME> --value <token>` mit `--host localhost`
-  oder `--host host.docker.internal` funktioniert — wird in Schritt 7 verifiziert.
+- Unklar, ob `sbx secret set-custom --host host.docker.internal ...` (README.md Schritt 2) so
+  funktioniert oder `--host localhost` nötig ist, und ob das Secret vor `sbx run` gesetzt sein muss
+  — wird in Schritt 6/7 verifiziert.
 - Kits sind laut Docker-Doku "experimentell" — Schema (`permissions.network.allow` etc.) kann sich
   ändern; bei Fehlern beim Sandbox-Erstellen in Schritt 5 gegen die dann aktuelle Kit-Referenz prüfen.
