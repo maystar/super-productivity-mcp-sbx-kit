@@ -37,9 +37,10 @@ Mit dem hier definierten Kit (`kits/super-productivity-rest-mcp`) kann eine Sand
   dieser automatisierte Teil ist noch nicht in einem frischen `sbx run` getestet, siehe TODO.md
   Schritt 7.
 
-Geplant, noch nicht begonnen (TODO.md Schritt 8): der MCP-Server-Code soll in ein eigenes
-GitHub-Projekt mit Build Action ausgelagert werden; das Kit bezieht ihn dann als Container-Image
-statt ihn bei jedem Sandbox-Start aus dem Quellcode zu bauen.
+**Erledigt (TODO.md Schritt 8):** Der MCP-Server-Code liegt jetzt als eigenständiges Projekt unter
+[../super-productivity-rest-mcp/](../super-productivity-rest-mcp/) (lokales Git-Repo, noch ohne
+Remote — Veröffentlichung auf GitHub ist die nächste, beim Nutzer liegende Aktion). Danach folgt
+die Anpassung **dieses** Kits auf Bezug per Container-Image statt `npm install` aus dem Quellcode.
 
 ---
 

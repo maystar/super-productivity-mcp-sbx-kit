@@ -115,11 +115,33 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
         einer neu gestarteten Session sichtbar. Bei nächster Gelegenheit (neue Session oder
         Sandbox-Neustart) mit `/mcp` und echten Tool-Aufrufen durch den Agenten selbst (nicht nur
         den Testclient) verifizieren.
-- [ ] **8. MCP-Server in eigenes Projekt auslagern** — Da der MCP-Server mehr als nur eine Datei
-      wird, sollte der Code in ein eigenes GitHub-Projekt mit Build Action ausgelagert werden. Das
-      Kit kann den Server dann per Container-Image beziehen und starten, statt ihn per `npm
-      install` bei jedem Sandbox-Start aus dem Quellcode zu bauen (Schritt 7 s.o.). Umnummeriert
-      von der ursprünglichen (doppelten) "7" — noch nicht begonnen.
+- [x] **8. MCP-Server in eigenes Projekt auslagern** — Code liegt jetzt als eigenständiges,
+      lokales Git-Repo unter `../super-productivity-rest-mcp/` (Geschwisterverzeichnis von
+      `super-productivity/`, noch ohne Remote — Veröffentlichung auf GitHub ist Nutzer-Aktion):
+      - **Struktur verbessert:** `index.js` (nur noch Entry-Point: Env lesen, stdio verbinden),
+        `src/rest-client.js` (reiner HTTP-Client, kennt MCP nicht), `src/tool-result.js` (Result-/
+        Error-Wrapping), `src/tools/*.js` (ein Modul je Ressource: health, tasks, task-control,
+        focus, projects, tags), `src/server.js` (verdrahtet alles). User-sichtbare Strings auf
+        Englisch übersetzt (eigenständiges Projekt, nicht mehr Teil dieses deutschsprachigen
+        Workspace).
+      - **Portabilität:** keine Kit-/Sandbox-/sbx-spezifische Annahme mehr im Code;
+        `SP_REST_BASE_URL`/`SP_REST_TOKEN` bleiben Env-Var-Konfiguration mit sinnvollem Default.
+      - **Dockerfile** (Multi-Stage, `node:22-alpine`, non-root) + zwei GitHub Actions
+        (`ci.yml`: Test + Docker-Build auf jeden Push/PR; `docker-publish.yml`: Build+Push nach
+        GHCR auf `main` und `v*.*.*`-Tags).
+      - **Getestet, so weit ohne echte Super-Productivity-Instanz in dieser Sandbox möglich:**
+        `npm test` (neuer netzwerkfreier Smoke-Test: In-Memory-MCP-Client, RFC-5737-unroutbare
+        Adresse, prüft alle 16 Tools + korrektes `isError`-Verhalten bei unerreichbarem Backend) ✅,
+        `docker build` ✅, echter MCP-Handshake (`initialize` + `tools/list` per stdio) gegen den
+        gebauten Container ✅ (liefert alle 16 Tools). Der alte Testclient (jetzt
+        `test/manual-client.mjs`) gegen eine **echte** laufende Instanz wurde hier **nicht** erneut
+        ausgeführt — dieser Sandbox fehlt der Zugriff auf den Host; war aber bereits in Schritt 7
+        gegen die echte Instanz verifiziert und ist inhaltlich unverändert.
+      - README.md (Englisch) und CLAUDE.md liegen im neuen Repo.
+      - **Noch offen (bewusst nicht Teil dieses Schritts):** Veröffentlichung auf GitHub (Nutzer-
+        Aktion), danach Anpassung **dieses** Kits (`kits/super-productivity-rest-mcp/spec.yaml`)
+        auf Bezug per Container-Image statt `npm install` aus dem Quellcode — geplant als nächster
+        Schritt, sobald das neue Repo/Image über GitHub erreichbar ist.
 
 ---
 
