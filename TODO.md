@@ -142,6 +142,47 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
         Aktion), danach Anpassung **dieses** Kits (`kits/super-productivity-rest-mcp/spec.yaml`)
         auf Bezug per Container-Image statt `npm install` aus dem Quellcode — geplant als nächster
         Schritt, sobald das neue Repo/Image über GitHub erreichbar ist.
+      - **Nachtrag (2026-09-15, gleiche Sandbox `sp-rest-mcp`, andere Chat-Session):** Docker-Image
+        gebaut und via `claude mcp add ... -- docker run -i --rm ...` registriert (Korrektur: in
+        einer vorherigen Notiz hier fälschlich als "andere Sandbox `claude-workspace`" bezeichnet —
+        `claude-workspace` ist nur der Verzeichnisname, `$SANDBOX_NAME`/`hostname` bestätigen: es
+        ist dieselbe Sandbox `sp-rest-mcp` wie in Schritt 7). Dabei die gleiche
+        `403 FORBIDDEN "Invalid Host header"`-Symptomatik wie in Schritt 7 reproduziert — aber aus
+        einem **anderen** Grund als dort vermerkt: Schritt 7s Notiz ("`claude mcp add` startet den
+        Server standardmäßig mit voller Umgebung, ist also nicht betroffen") stimmt nur für den
+        **direkten Node-Aufruf**. Bei Docker als Transport greift sie **nicht** — `docker run`
+        reicht die Host-Umgebung grundsätzlich nicht in den Container durch, auch nicht, wenn der
+        Server-Prozess selbst mit voller Umgebung gestartet wurde; nötig sind explizite `-e`-Flags
+        pro Variable. Reproduziert per direktem Node-`fetch()`-Test innerhalb des Containers: ohne
+        `HTTP(S)_PROXY`/`NO_PROXY` (+ Kleinschreibung) und `NODE_USE_ENV_PROXY=1` im Container
+        → `403`; mit denselben `-e`-Flags sowohl bei `claude mcp add` (äußere Prozessumgebung) als
+        auch im `docker run`-Kommando selbst (damit sie in den Container gelangen) → `200 OK`,
+        echte Task-Daten. Betrifft also **jede** Docker-basierte Registrierung dieses MCP-Servers
+        in einer sbx-Sandbox, nicht nur diesen einen Fall — relevant für die geplante Umstellung
+        dieses Kits auf Bezug per Container-Image (s. o.): der `setup.startup`-Block muss die
+        Proxy-Variablen dann ebenfalls explizit in den `docker run`-Aufruf durchreichen, nicht nur
+        `SP_REST_TOKEN`/`SP_REST_BASE_URL`.
+      - **Root-Cause-Nachtrag (2026-09-15):** Der eigentliche Mechanismus dahinter, per Vergleichs-
+        test aus dieser Sandbox belegt (drei Varianten desselben `GET /tasks`-Calls mit demselben
+        `$SP_REST_TOKEN`-Wert):
+        1. Über den Proxy (`http_proxy`/`HTTP_PROXY` gesetzt), Header unverändert → `200 OK`.
+        2. Direkt (`--noproxy '*'`), Host-Header unverändert (`host.docker.internal:3876`) →
+           `403 FORBIDDEN "Invalid Host header"`.
+        3. Direkt (`--noproxy '*'`), Host-Header auf `localhost:3876` gespooft → SP akzeptiert den
+           Host jetzt, meldet aber `401 UNAUTHORIZED "Invalid authorization token"` — mit
+           **demselben** Token, der über den Proxy soeben noch funktioniert hat.
+        Schlussfolgerung: `$SP_REST_TOKEN` (`sbx-cs-...`) ist selbst nur ein **Platzhalter** für ein
+        sbx Custom Secret (vgl. Schritt 6: `sbx secret set-custom ... --host localhost`) — der
+        Sandbox-Proxy (`gateway.docker.internal:3128`) ersetzt ihn erst beim Durchleiten durch den
+        echten Bearer-Token, **und** normalisiert dabei offenbar den Host-Header passend zum beim
+        Secret hinterlegten `--host`-Wert. Ohne Proxy im Pfad bleibt der Platzhalter-String
+        unverändert und wird von Super Productivity zu Recht als ungültiger Token abgelehnt (401),
+        *nachdem* ein unpassender Host bereits vorher mit 403 abgelehnt worden wäre. Praktische
+        Konsequenz, über den reinen Docker-Fall hinaus: **jede** Umgebung, die diesen MCP-Server für
+        `SP_REST_TOKEN` nutzt, muss ihre Requests zwingend über `HTTP(S)_PROXY=http://gateway.docker.internal:3128`
+        leiten (bei Node zusätzlich `NODE_USE_ENV_PROXY=1`) — unabhängig von Docker vs. direktem
+        Node-Prozess. Das ist der eigentliche, allgemeinere Grund hinter der 403/401-Symptomatik,
+        nicht nur ein Docker-Env-Passthrough-Detail.
 
 ---
 
