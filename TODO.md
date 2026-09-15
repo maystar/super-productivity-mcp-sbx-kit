@@ -30,33 +30,96 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
       dieses Feld in anderen Kits bereits erfolgreich verwendet. Auf `"2"` korrigiert. Weiterhin
       offen: `host.docker.internal:3876` vs. `localhost:3876` (siehe Warnhinweis in der Datei)
 - [x] **4. README.md** — Sandbox-Start, Zweck, Host-Voraussetzungen dokumentiert
-- [ ] **5. Sandbox starten** — **Aktion beim Nutzer**, mit diesem Verzeichnis als Kit-Quelle **und**
-      Workdir, fester Name `sp-rest-mcp` (Befehle siehe README.md, Abschnitt "Sandbox mit diesem
-      Kit starten" — inkl. Token/Secret-Übergabe, die dort jetzt konkret definiert ist statt nur
-      "geplant")
-- [ ] **6. Erreichbarkeit testen** — **Aktion für einen Agenten innerhalb der neuen Sandbox**:
-      - `curl http://host.docker.internal:3876/health` → sollte `{"ok":true,"data":{"server":"up","rendererReady":true}}` liefern (unauthentifiziert, einziger offener Endpunkt)
-      - Falls `403`/Policy-Block: prüfen, welcher Domain-Name in der Fehlermeldung steht
-        (`host.docker.internal:3876` oder `localhost:3876`) und `spec.yaml` entsprechend anpassen/kürzen
-      - Falls Connection-Error (nicht Policy-Block): prüfen, ob Super Productivity läuft und die
-        REST API in den Settings aktiviert ist (siehe README.md, Abschnitt "Host-Voraussetzungen")
-- [ ] **7. MCP-Server entwickeln und ins Kit integrieren** — **Aktion für einen Agenten innerhalb
-      der Sandbox** (oder hier, sobald Schritt 6 grün ist), u. a.:
-      - **Vorher kurz prüfen, ob `setup:`/`commands:`/`files:` (Schlüsselnamen UND ob sie ggf.
-        auch an `schemaVersion` gebunden sind) zur tatsächlich installierten sbx-Version passen** —
-        siehe Lehre aus Schritt 3 (`permissions.network.allow` brauchte `schemaVersion: "2"`, nicht
-        `"1"`). Im Zweifel `sbx kit --help` prüfen oder mit einem minimalen Test-Kit ausprobieren,
-        bevor die eigentliche Install-Logik reinkommt.
-      - Token-Übergabe ist bereits in README.md Schritt 2 definiert (`sbx secret set-custom`,
-        Platzhalter-Mechanismus, `$SP_REST_TOKEN`) — **Host-Aktion**, idealerweise schon vor/bei
-        Schritt 5 erledigt, damit die Sandbox dafür nicht neu erstellt werden muss
-      - MCP-Server schreiben, der die REST-Endpunkte (Tasks CRUD, task-control, focus, projects,
-        tags) als Claude-Code-Tools kapselt — Endpunkt-/Feld-Details siehe
-        [docs/rest-api-reference.md](./docs/rest-api-reference.md) (vor der Implementierung kurz
-        gegen die Live-Wiki-Seite gegenprüfen, siehe Hinweis am Anfang der Datei)
-      - Server user-scoped in `~/.claude.json` der Sandbox registrieren (analog zum vorherigen
-        Ansatz, aber ohne Host-HOME-Ableitung — hier reicht eine feste Basis-URL)
-      - Mit `/mcp` und echten Testaufrufen verifizieren
+- [x] **5. Sandbox starten** — **Aktion beim Nutzer**, mit diesem Verzeichnis als Kit-Quelle **und**
+      Workdir (Befehle siehe README.md, Abschnitt "Sandbox mit diesem Kit starten" — inkl.
+      Token/Secret-Übergabe, die dort jetzt konkret definiert ist statt nur "geplant"). Tatsächlich
+      gestarteter Name: `superprod` (abweichend vom Vorschlag `sp-rest-mcp` im README — reiner
+      Default, kein Muss)
+- [x] **6. Erreichbarkeit testen** — durchgeführt in Sandbox `superprod` (2026-09-14):
+      - `curl http://host.docker.internal:3876/health` → `200 OK`,
+        `{"ok":true,"data":{"server":"up","rendererReady":true}}` ✅ — kein Policy-Block, Netzwerk-
+        Teil der Kit-Freigabe funktioniert wie geplant, `host.docker.internal:3876` ist korrekt.
+      - Erster Versuch (Secret ursprünglich mit `--host host.docker.internal` gesetzt, beim
+        Sandbox-Start): `curl -H "Authorization: Bearer $SP_REST_TOKEN" .../status` → **echte**
+        `401 UNAUTHORIZED` von der Super-Productivity-API (kein Proxy-Block!) — Platzhalter kam
+        unersetzt an. Vermuteter Grund: `--host host.docker.internal` war falsch.
+      - Nutzer hat das **gleiche** Secret (`--env SP_REST_TOKEN`) erneut gesetzt, diesmal mit
+        `--host localhost` (= der jetzt in README.md Schritt 2 fest hinterlegte Befehl), **ohne**
+        die laufende Sandbox neu zu starten. Der neue Platzhalter tauchte danach **nicht** als
+        aktualisierter Wert von `$SP_REST_TOKEN` in der laufenden Sandbox auf (auch nicht nach
+        frischer Login-Shell) — Custom Secrets werden also offenbar nur **beim Sandbox-Start**
+        in die Prozessumgebung injiziert, ein `set-custom` auf eine bereits laufende Sandbox wirkt
+        sich dort nicht sofort auf `process.env` aus.
+      - Test **direkt mit dem neuen Platzhalterwert** (vom Nutzer aus der Host-Kommandoausgabe
+        mitgeteilt, nicht aus einer Sandbox-Env-Var) gegen `GET /status` → **`200 OK`**, echte
+        Task-Daten zurück ✅ — bestätigt: Platzhalter-Ersetzung durch den sbx-Proxy funktioniert mit
+        `--host localhost`, rein netzwerkseitig (Zielhost + registrierter Wert), unabhängig davon,
+        ob der Wert gerade als Env-Var in der Sandbox sichtbar ist.
+      - **Schlussfolgerung:** `--host localhost` ist korrekt (nicht `host.docker.internal`).
+        Damit ein MCP-Server (Schritt 7) den Token regulär über `process.env.SP_REST_TOKEN` lesen
+        kann, muss die Sandbox mit dem `--host localhost`-Secret **neu gestartet** werden — als
+        Nächstes geplant.
+- [x] **6b. Schritt 6 wiederholt, in frisch gestarteter Sandbox `sp-rest-mcp`** (2026-09-14,
+      Default-Name aus README, **nicht** `superprod` — die vorherige Sandbox war zwischenzeitlich
+      beendet worden):
+      - `curl http://host.docker.internal:3876/health` → `200 OK` ✅ (weiterhin unverändert)
+      - `curl -H "Authorization: Bearer $SP_REST_TOKEN" .../status` → **`200 OK`**,
+        `{"ok":true,"data":{"currentTask":null,"currentTaskId":null,"taskCount":39}}` ✅
+      - **Damit bestätigt:** Das Secret war diesmal **vor** `sbx run` mit `--host localhost`
+        gesetzt (README Schritt 2) — Token-Substitution funktioniert beim Sandbox-Start
+        zuverlässig. Die schmalere, noch offene Frage aus Schritt 6 (ob ein `set-custom` auf eine
+        **bereits laufende** Sandbox nach deren Neustart ankommt) ist damit nicht separat
+        getestet, aber praktisch nicht mehr relevant: Sandboxen werden ohnehin mit gesetztem
+        Secret frisch gestartet.
+      - `echo $SP_REST_TOKEN` in dieser Sandbox zeigt weiterhin nur den Platzhalter
+        (`sbx-cs-jcMRloAQd1lWDwFK`) — erwartet, siehe README.
+- [x] **7. MCP-Server entwickeln und ins Kit integrieren** — durchgeführt in Sandbox
+      `sp-rest-mcp` (2026-09-14):
+      - **Schema-Check vorab (wie gefordert):** `docs.docker.com/ai/sandboxes/customize/kit-reference/`
+        war von der Sandbox aus tatsächlich erreichbar (kein zusätzlicher Netzwerk-Freigabe-Bedarf,
+        anders als in der Datei ursprünglich angenommen — generelles Web scheint hier per Default
+        offen zu sein, nur `host.docker.internal` brauchte die explizite Kit-Freigabe). Ergebnis:
+        unter `schemaVersion: "2"` heißt der Top-Level-Schlüssel `setup:` (mit `install`/`startup`/
+        `files` darunter), **nicht** `commands:` — das alte, nie getestete Kit (`e275fba`) hätte mit
+        `commands:` also ebenfalls falsch gelegen. Details/Zitat der Ausführungsreihenfolge als
+        Kommentar direkt in [kits/super-productivity-rest-mcp/spec.yaml](./kits/super-productivity-rest-mcp/spec.yaml).
+      - **MCP-Server implementiert:** [kits/super-productivity-rest-mcp/mcp-server/](./kits/super-productivity-rest-mcp/mcp-server/)
+        (Node 22, `@modelcontextprotocol/sdk`, native `fetch`). 16 Tools, ein Tool pro
+        Endpunkt/Aktion aus [docs/rest-api-reference.md](./docs/rest-api-reference.md) (Tasks CRUD
+        + start/archive/restore, task-control get/set/stop, `/status`, `/focus`, Projects, Tags,
+        `/health`). Token kommt aus `process.env.SP_REST_TOKEN`.
+      - **Stolperstein gefunden + gefixt:** Ein erster Testclient reichte dem Server-Subprozess nur
+        `PATH`+`SP_REST_TOKEN` durch (nicht die volle Umgebung) → echte `403 FORBIDDEN "Invalid
+        Host header"` von der Super-Productivity-API. Ursache: die Sandbox routet
+        `host.docker.internal`-Traffic über einen HTTP-Proxy
+        (`HTTP(S)_PROXY=http://gateway.docker.internal:3128`), der vermutlich auch den Host-Header
+        normalisiert; ohne die Proxy-Env-Vars ging der Request direkt raus und wurde von der API
+        abgelehnt. Fix: volle `process.env` an den Server-Subprozess durchreichen (relevant auch
+        für die Kit-Registrierung — `claude mcp add` startet den Server standardmäßig mit voller
+        Umgebung, ist also nicht betroffen, aber gut zu wissen für eigene Testclients).
+      - **End-to-End verifiziert** (echter Test-MCP-Client, `kits/super-productivity-rest-mcp/mcp-server/test-client.mjs`,
+        nicht Teil des Kits selbst): `sp_health`, `sp_status`, `sp_tasks_list`, `sp_projects_list`
+        gegen die echte, laufende Super-Productivity-Instanz aufgerufen — alle liefern reale Daten
+        (u. a. 39 existierende Tasks) statt Fehlern.
+      - **User-scoped in `~/.claude.json` registriert:** `claude mcp add super-productivity --scope
+        user -- node <Pfad>/index.js` manuell in der laufenden Sandbox ausgeführt, `claude mcp list`
+        zeigt `super-productivity: ... - ✔ Connected`.
+      - **Automatisierung ins Kit integriert:** `setup.startup`-Block in spec.yaml (läuft bei jedem
+        Sandbox-Start, idempotent: `npm install` nur falls `node_modules` fehlt, `mcp remove` vor
+        `mcp add`) — Skript isoliert extrahiert und probeweise in der laufenden Sandbox ausgeführt,
+        Ergebnis identisch zur manuellen Registrierung. **Noch nicht** als Teil eines echten
+        frischen `sbx run` mit diesem Kit getestet (siehe Warnhinweis in spec.yaml) — vor dem
+        nächsten `sbx run` idealerweise gegenprüfen.
+      - **Noch offen:** `/mcp` in dieser laufenden Claude-Code-Session zeigt den Server noch
+        nicht, da die Session bereits vor der Registrierung gestartet war — Tools werden erst in
+        einer neu gestarteten Session sichtbar. Bei nächster Gelegenheit (neue Session oder
+        Sandbox-Neustart) mit `/mcp` und echten Tool-Aufrufen durch den Agenten selbst (nicht nur
+        den Testclient) verifizieren.
+- [ ] **8. MCP-Server in eigenes Projekt auslagern** — Da der MCP-Server mehr als nur eine Datei
+      wird, sollte der Code in ein eigenes GitHub-Projekt mit Build Action ausgelagert werden. Das
+      Kit kann den Server dann per Container-Image beziehen und starten, statt ihn per `npm
+      install` bei jedem Sandbox-Start aus dem Quellcode zu bauen (Schritt 7 s.o.). Umnummeriert
+      von der ursprünglichen (doppelten) "7" — noch nicht begonnen.
 
 ---
 
@@ -69,7 +132,7 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
 - [x] `sbx` installiert, `sbx login` durchgeführt
 
 ## Noch offen, bevor Schritt 7 abgeschlossen werden kann
-- [ ] In Super Productivity: **Settings → Misc → Enable local REST API** aktivieren, Access Token notieren
+- [x] In Super Productivity: **Settings → Misc → Enable local REST API** aktivieren, Access Token notieren
 
 ---
 
@@ -77,11 +140,30 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
 - **Geklärt (2026-09-14):** `permissions.network.allow` ist gültig, brauchte aber
   `schemaVersion: "2"` statt `"1"` (aus der alten Anleitung übernommen, ohne die Versionsbindung
   zu prüfen). Auf `"2"` korrigiert.
-- Unklar, ob die Netzwerk-Policy intern auf `host.docker.internal:<port>` oder `localhost:<port>`
-  matcht (siehe Warnhinweis in `spec.yaml`) — wird in Schritt 6 verifiziert.
-- Unklar, ob `sbx secret set-custom --host host.docker.internal ...` (README.md Schritt 2) so
-  funktioniert oder `--host localhost` nötig ist, und ob das Secret vor `sbx run` gesetzt sein muss
-  — wird in Schritt 6/7 verifiziert.
+- **Geklärt (2026-09-14, Schritt 6):** Netzwerk-Policy matcht `host.docker.internal:3876`
+  korrekt — `/health` liefert `200` ohne Policy-Block. `spec.yaml` muss hier nicht geändert werden.
+- **Geklärt (2026-09-14, Schritt 6):** `sbx secret set-custom --host host.docker.internal`
+  funktioniert **nicht** für die Token-Substitution (echte `401` mit unersetztem Platzhalter
+  beobachtet); `--host localhost` ist der richtige Wert (verifiziert per direktem Test des neuen
+  Platzhalters gegen `/status` → `200`). README.md Schritt 2 nutzt jetzt `--host localhost`.
+- **Geklärt (2026-09-14, Schritt 6b):** In einer frisch mit `--host localhost`-Secret gestarteten
+  Sandbox (`sp-rest-mcp`, Default-Name) liefert `GET /status` mit
+  `Authorization: Bearer $SP_REST_TOKEN` ein echtes `200 OK` — Token-Substitution funktioniert
+  regulär über `process.env.SP_REST_TOKEN`, kein manueller Workaround nötig. Die schmalere Frage
+  (Secret-Update auf eine **bereits laufende** Sandbox nach deren Neustart) bleibt ungetestet, ist
+  aber für den weiteren Plan irrelevant, da Sandboxen ohnehin mit bereits gesetztem Secret
+  gestartet werden.
+  Aktuelle Sandbox heißt `sp-rest-mcp` (Default-Name), nicht mehr `superprod` (die war zwischen-
+  zeitlich beendet worden).
 - Kits sind laut Docker-Doku "experimentell" — Schema-Details können an `schemaVersion` gebunden
   sein (s.o.); bei Fehlern in Schritt 7 (`setup:`/`commands:`/`files:`) zuerst dort ansetzen, statt
   am Feldnamen selbst zu zweifeln.
+- **Geklärt (2026-09-14, Schritt 7):** `setup:`/`install:`/`startup:`/`files:` sind unter
+  `schemaVersion: "2"` die korrekten Schlüssel (`setup:` top-level, nicht `commands:`) —
+  verifiziert gegen die reale Kit-Referenz (von der Sandbox aus erreichbar, s. u.). Details/
+  Ausführungsreihenfolge als Kommentar in spec.yaml.
+- **Geklärt (2026-09-14, Schritt 7):** Generelles Web (z. B. `docs.docker.com`, `github.com`) war
+  von der Sandbox aus ohne weitere Freigabe erreichbar — die in Kapitel "Ziel" und in
+  `docs/rest-api-reference.md` getroffene Annahme, ein Sandbox-Agent bräuchte dafür zusätzliche
+  Netzwerkfreigabe, war für **diese** Sandbox-Konfiguration zu vorsichtig (evtl. sandbox-/
+  policy-abhängig, daher nicht pauschal verallgemeinert, aber hier kein Blocker).

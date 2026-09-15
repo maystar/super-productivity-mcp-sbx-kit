@@ -4,24 +4,62 @@ name: super-productivity-rest-mcp
 displayName: Super Productivity REST API Access
 description: >-
   Gibt der Sandbox Netzwerkzugriff auf die Super Productivity Local REST API,
-  die auf dem Host unter 127.0.0.1:3876 läuft (erreicht via host.docker.internal).
-  Aktueller Stand: reine Netzwerkfreigabe zum Verifizieren der Erreichbarkeit.
-  Der eigentliche MCP-Server (der die REST-Endpunkte als Claude-Code-Tools kapselt)
-  ist ein noch folgender Ausbauschritt, siehe TODO.md.
+  die auf dem Host unter 127.0.0.1:3876 läuft (erreicht via host.docker.internal),
+  und installiert + registriert bei jedem Sandbox-Start den mitgelieferten
+  MCP-Server (kits/super-productivity-rest-mcp/mcp-server/), der die REST-Endpunkte
+  als Claude-Code-Tools kapselt. Siehe TODO.md/README.md für Details und Verifikationsstand.
 
 # Hinweis: Der ursprüngliche Versuch mit schemaVersion "1" scheiterte am echten sbx mit
 # "field permissions not found in type spec.SpecFile" — nicht weil das Feld grundsätzlich
 # nicht existiert (der Nutzer verwendet permissions.network.allow bereits erfolgreich in
 # anderen Kits), sondern weil es offenbar erst ab schemaVersion "2" Teil des Schemas ist.
 #
-# ⚠️ Weiterhin unverifiziert (kein sbx-Zugriff von hier aus möglich): Ob die Allow-Liste
-# intern gegen "host.docker.internal:<port>" oder "localhost:<port>" matcht. Ein früherer
-# Testaufruf (curl http://host.docker.internal:3876 aus einer anderen Sandbox) wurde von der
-# Netzwerk-Policy als Domain "localhost:3876" geloggt/geblockt — nicht als
-# "host.docker.internal:3876". Deshalb sind unten beide Varianten eingetragen; nach dem
-# ersten echten Test (TODO.md Schritt 6) auf die tatsächlich wirksame Variante kürzen.
+# Verifiziert (TODO.md Schritt 6/6b, 2026-09-14): host.docker.internal:3876 matcht und
+# funktioniert (/health und /status beide 200). localhost:3876 bleibt zusätzlich in der
+# Allow-Liste, da es harmlos ist und die Diagnose in Schritt 6 abgesichert hat.
 permissions:
   network:
     allow:
       - host.docker.internal:3876
       - localhost:3876
+
+# Verifiziert gegen die reale Kit-Referenz (docs.docker.com/ai/sandboxes/customize/kit-reference/,
+# abgerufen 2026-09-14 im Rahmen von Schritt 7 — von hier aus tatsächlich erreichbar, kein
+# zusätzlicher Netzwerk-Freigabe-Bedarf): unter schemaVersion "2" heißt der Top-Level-Schlüssel
+# `setup:` (nicht `commands:` wie im verworfenen Vorgänger-Kit, siehe Git-Commit `e275fba` — das
+# war unter schemaVersion "1" ohnehin nie sbx-getestet). `setup.startup` läuft bei JEDEM
+# Sandbox-Start, argv-Form (kein Shell-Parsing), Default-User "1000" (agent) — passend, weil
+# ~/.claude.json dem Agent-User gehört. Startup-Commands MÜSSEN idempotent sein (laufen bei jedem
+# Neustart erneut) — deshalb hier: node_modules-Check vor `npm install`, `mcp remove` vor `mcp add`.
+#
+# ⚠️ Noch nicht End-to-End getestet: Ob dieser `setup.startup`-Block bei einem echten `sbx run`
+# (frische Sandbox) tatsächlich wie hier angenommen ausgeführt wird. Manuell in der laufenden
+# Sandbox `sp-rest-mcp` einzeln verifiziert (npm install + claude mcp add liefen beide erfolgreich,
+# `claude mcp list` zeigt den Server als "✔ Connected") — aber noch nicht als Teil eines frischen
+# `sbx run` mit diesem Kit. Vor dem nächsten `sbx run` idealerweise einmal gegenprüfen.
+setup:
+  startup:
+    - command:
+        - sh
+        - -c
+        - |
+          set -u
+          exec >>"$HOME/.cache/super-productivity-mcp-setup.log" 2>&1
+          mkdir -p "$HOME/.cache"
+          printf '=== %s ===\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          export PATH="$HOME/.local/bin:$HOME/.claude/local:$PATH"
+          BASE="${WORKSPACE_DIR:-$PWD}/kits/super-productivity-rest-mcp/mcp-server"
+          if [ ! -d "$BASE" ]; then
+            echo "WARNUNG: $BASE nicht gefunden, überspringe MCP-Server-Setup."
+            exit 0
+          fi
+          if [ ! -d "$BASE/node_modules" ]; then
+            ( cd "$BASE" && npm install --omit=dev --no-fund --no-audit ) \
+              || { echo "FEHLER: npm install fehlgeschlagen"; exit 0; }
+          fi
+          claude mcp remove super-productivity --scope user >/dev/null 2>&1 || true
+          claude mcp add super-productivity --scope user -- node "$BASE/index.js" \
+            || echo "FEHLER: claude mcp add fehlgeschlagen"
+      user: "1000"
+      background: false
+      description: "Super-Productivity-MCP-Server installieren und user-scoped registrieren"
