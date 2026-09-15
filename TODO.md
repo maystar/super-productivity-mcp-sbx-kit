@@ -183,6 +183,28 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
         leiten (bei Node zusätzlich `NODE_USE_ENV_PROXY=1`) — unabhängig von Docker vs. direktem
         Node-Prozess. Das ist der eigentliche, allgemeinere Grund hinter der 403/401-Symptomatik,
         nicht nur ein Docker-Env-Passthrough-Detail.
+- [x] **9. Kit auf Container-Image umstellen** — Nutzer hat `../super-productivity-rest-mcp/` auf
+      GitHub veröffentlicht und das Image nach GHCR gepusht: `ghcr.io/maystar/super-productivity-rest-mcp`
+      (2026-09-15). Daraufhin:
+      - `permissions.network.allow` in spec.yaml um `ghcr.io:443` ergänzt (war zunächst per
+        Default-Deny blockiert — `docker pull` schlug mit `403 Forbidden`/"Blocked by network
+        policy" fehl, bis der Nutzer die Freigabe per `sbx policy allow` gesetzt hat).
+      - `docker pull ghcr.io/maystar/super-productivity-rest-mcp` verifiziert (Image-Entrypoint
+        `node index.js`, passt zum README des neuen Repos).
+      - Lokale Registrierung umgestellt: `claude mcp remove` + `claude mcp add ... -- docker run -i
+        --rm -e SP_REST_TOKEN -e SP_REST_BASE_URL -e HTTP_PROXY -e HTTPS_PROXY -e NO_PROXY -e
+        http_proxy -e https_proxy -e no_proxy -e NODE_USE_ENV_PROXY
+        ghcr.io/maystar/super-productivity-rest-mcp:latest` — `claude mcp list` zeigt
+        `✔ Connected`. Proxy-Env-Vars sind weiterhin nötig, s. Root-Cause-Nachtrag oben.
+      - `kits/super-productivity-rest-mcp/spec.yaml`s `setup.startup`-Block auf `docker pull` +
+        obigen `docker run`-Aufruf umgestellt (statt `npm install` + `node index.js` aus dem
+        Quellcode).
+      - `kits/super-productivity-rest-mcp/mcp-server/` (lokaler Quellcode, `node_modules`
+        eingeschlossen) komplett entfernt — lebt jetzt ausschließlich in
+        `../super-productivity-rest-mcp/`.
+      - **Noch nicht End-to-End getestet:** der neue `setup.startup`-Block in einem frischen
+        `sbx run` (nur manuell in der laufenden Sandbox nachvollzogen, s. o.) — gleiche
+        Einschränkung wie schon bei Schritt 7 vermerkt.
 
 ---
 

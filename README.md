@@ -28,19 +28,22 @@ Mit dem hier definierten Kit (`kits/super-productivity-rest-mcp`) kann eine Sand
   `Authorization: Bearer $SP_REST_TOKEN` (Secret mit `--host localhost` gesetzt) — **verifiziert
   am 2026-09-14 in Sandbox `sp-rest-mcp`: `200 OK` mit echten Task-Daten**
 
-- per MCP-Server ([kits/super-productivity-rest-mcp/mcp-server/](./kits/super-productivity-rest-mcp/mcp-server/))
+- per MCP-Server aus dem veröffentlichten Container-Image
+  [`ghcr.io/maystar/super-productivity-rest-mcp`](https://github.com/maystar/super-productivity-rest-mcp)
   die REST-Endpunkte als 16 Claude-Code-Tools nutzen (Tasks CRUD + start/archive/restore,
   task-control, Status, Focus-Mode, Projekte, Tags) — **verifiziert am 2026-09-14** per Testclient
   gegen die echte, laufende Super-Productivity-Instanz (u. a. reale Task-Liste mit 39 Einträgen
   abgerufen). Der Server ist zusätzlich user-scoped in `~/.claude.json` der Sandbox registriert und
-  wird beim Sandbox-Start automatisch installiert + registriert (`setup.startup` in spec.yaml) —
-  dieser automatisierte Teil ist noch nicht in einem frischen `sbx run` getestet, siehe TODO.md
-  Schritt 7.
+  wird beim Sandbox-Start automatisch registriert (`docker pull` + `claude mcp add ... -- docker
+  run ...` in `setup.startup` in spec.yaml) — dieser automatisierte Teil ist noch nicht in einem
+  frischen `sbx run` getestet, siehe TODO.md Schritt 7/9.
 
-**Erledigt (TODO.md Schritt 8):** Der MCP-Server-Code liegt jetzt als eigenständiges Projekt unter
-[../super-productivity-rest-mcp/](../super-productivity-rest-mcp/) (lokales Git-Repo, noch ohne
-Remote — Veröffentlichung auf GitHub ist die nächste, beim Nutzer liegende Aktion). Danach folgt
-die Anpassung **dieses** Kits auf Bezug per Container-Image statt `npm install` aus dem Quellcode.
+**Erledigt (TODO.md Schritt 8+9):** Der MCP-Server-Code lebt jetzt als eigenständiges Projekt unter
+[../super-productivity-rest-mcp/](../super-productivity-rest-mcp/), auf GitHub veröffentlicht und
+per GitHub Actions als Image nach GHCR gepusht. Dieses Kit bezieht den Server seither per
+Container-Image (`ghcr.io/maystar/super-productivity-rest-mcp`) statt ihn aus lokalem Quellcode zu
+bauen — `kits/super-productivity-rest-mcp/mcp-server/` (der alte, jetzt überflüssige Quellcode)
+wurde entfernt.
 
 ---
 
@@ -96,8 +99,8 @@ auch nicht in der Shell-History.
 Kein zweiter Mount-Pfad nötig (anders als beim alten Ansatz) — die REST API braucht kein
 gemountetes Host-Verzeichnis, nur die Netzwerkfreigabe aus dem Kit.
 
-Nach dem Start: Das Kit installiert und registriert den MCP-Server automatisch (`setup.startup`,
-siehe spec.yaml) — `claude mcp list` sollte `super-productivity: ... - ✔ Connected` zeigen, `/mcp`
+Nach dem Start: Das Kit zieht das Container-Image und registriert den MCP-Server automatisch
+(`setup.startup`, siehe spec.yaml) — `claude mcp list` sollte `super-productivity: ... - ✔ Connected` zeigen, `/mcp`
 in einer **neu gestarteten** Claude-Code-Session entsprechend die 16 Tools (eine bereits laufende
 Session sieht neu registrierte Server nicht automatisch). `echo $SP_REST_TOKEN` in der Sandbox
 zeigt weiterhin nur den Platzhalter aus Schritt 2 (nicht leer, aber auch nicht der echte Token —
@@ -108,11 +111,9 @@ das ist beabsichtigt, siehe oben).
 ## Weiteres Vorgehen
 
 Siehe [TODO.md](./TODO.md) für den vollständigen Plan und Verifikationsstand. Offen:
-- Schritt 7 (MCP-Server): den `setup.startup`-Automatismus einmal in einem frischen `sbx run`
-  bestätigen, und die Tools in einer neu gestarteten Claude-Code-Session (nicht nur per Testclient)
-  selbst aufrufen.
-- Schritt 8 (noch nicht begonnen): MCP-Server-Code in ein eigenes GitHub-Projekt mit Build Action
-  auslagern, Kit auf Container-Image statt Quellcode-Build umstellen.
+- Schritt 7/9 (MCP-Server): den `setup.startup`-Automatismus (jetzt `docker pull` + `docker run`)
+  einmal in einem frischen `sbx run` bestätigen, und die Tools in einer neu gestarteten
+  Claude-Code-Session (nicht nur per Testclient) selbst aufrufen.
 
 Für Schritt 7 liegt die API-Referenz (Endpunkte, Felder, Fehlercodes) bereits lokal vor:
 [docs/rest-api-reference.md](./docs/rest-api-reference.md).
