@@ -21,15 +21,17 @@ setup:
   # mechanism: https://docs.docker.com/ai/sandboxes/customize/kits/). Called with an explicit
   # interpreter (`sh`) so the copied file's default 0644 permissions are enough — no chmod needed.
   #
+  # Note the schema difference between the two: setup.install's `command` is a single shell
+  # string (passed to `sh -c`, no `background` field, default user "0"); setup.startup's `command`
+  # is an argv list (no shell parsing) and does support `background`. Mixing these up produces
+  # "cannot unmarshal !!seq into string" / "field background not found in type
+  # spec.InstallCommand" from sbx.
+  #
   # Runs once, synchronously, during sandbox creation — completes before the agent's first
   # session starts, so that session already sees the registered MCP server.
   install:
-    - command:
-        - sh
-        - /home/agent/.super-productivity-mcp/setup.sh
-        - install
+    - command: "sh /home/agent/.super-productivity-mcp/setup.sh install"
       user: "1000"
-      background: false
       description: "Register the MCP server once, during sandbox creation"
   # Runs on every subsequent sandbox start, to self-heal and keep the image current. The agent
   # never waits for this to finish (see setup.sh's header comment), unlike setup.install above.

@@ -244,6 +244,22 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
       `claude mcp list` zeigt danach weiterhin `✔ Connected`. **Noch nicht getestet:** der
       tatsächliche Kopiervorgang durch `sbx` selbst bei einem echten `sbx run`/`sbx kit add`
       (nur die Kopie von Hand simuliert, s. o.).
+- [x] **12. Schema-Fehler in Schritt 11 behoben** (2026-09-15) — Realer `sbx`-Lauf schlug fehl:
+      `invalid spec.yaml: yaml: unmarshal errors: line 28: cannot unmarshal !!seq into string /
+      line 32: field background not found in type spec.InstallCommand`. Ursache: `setup.install`
+      und `setup.startup` haben **unterschiedliche** Schemas, die bislang (Schritt 7–11) nie
+      gegeneinander geprüft wurden, weil `install` erst in Schritt 10 dazukam. Verifiziert gegen
+      `docs.docker.com/ai/sandboxes/customize/kit-reference/`: bei `setup.install` ist `command`
+      ein einzelner **String** (*"Shell strings are passed to `sh -c`."*), es gibt **kein**
+      `background`-Feld und `user` defaultet auf `"0"` (root). Bei `setup.startup` ist `command`
+      dagegen eine **argv-Liste** (*"String array, not interpreted by a shell."*) mit `background`
+      (Default `false`) und `user`-Default `"1000"`. Der `install`-Eintrag nutzte fälschlich das
+      `startup`-Schema (Listen-`command` + `background: false`). Fix: `install.command` auf den
+      String `"sh /home/agent/.super-productivity-mcp/setup.sh install"` umgestellt, `background`
+      entfernt. Verifiziert: `sh -c '<dieser String>'` lokal ausgeführt — Log zeigt den `install`-
+      Tag korrekt, `claude mcp list` weiterhin `✔ Connected`. Weiterhin **nicht getestet:** ein
+      echter `sbx run` mit dieser korrigierten spec.yaml (YAML-Syntax lokal validiert, aber ohne
+      `sbx`-Binary in dieser Sandbox nicht gegen das reale Schema geprüft).
 
 ---
 
