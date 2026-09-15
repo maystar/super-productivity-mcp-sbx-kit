@@ -16,7 +16,8 @@ siehe [TODO.md](./TODO.md).
 
 ## Wofür diese Sandbox aktuell genutzt werden kann
 
-Mit dem hier definierten Kit (`kits/super-productivity-rest-mcp`) kann eine Sandbox:
+Mit `sbx policy allow network` (siehe unten) und dem hier definierten, aktuell noch leeren Kit
+(`kits/super-productivity-rest-mcp`, nur als Platzhalter für Schritt 7) kann eine Sandbox:
 
 - per HTTP auf `http://host.docker.internal:3876` zugreifen (= die Super-Productivity Local REST
   API auf dem Host, die dort auf `127.0.0.1:3876` lauscht)
@@ -66,6 +67,7 @@ SBX_NAME="${SBX_NAME:-sp-rest-mcp}"
 read -rsp "Super Productivity Access Token: " SP_TOKEN
 echo
 
+sbx policy allow network localhost:3876,host.docker.internal:3876
 sbx secret set-custom --sandbox "$SBX_NAME" --host host.docker.internal --env SP_REST_TOKEN --value "$SP_TOKEN"
 
 cd /home/fabian/claude-workspace/super-productivity
@@ -73,6 +75,12 @@ sbx run claude --name "$SBX_NAME" \
   --kit ./kits/super-productivity-rest-mcp \
   .
 ```
+
+**Korrektur:** Die Netzwerkfreigabe passiert hier über `sbx policy allow network` (Host-Kommando,
+gilt laut unseren Projekt-Instruktionen global für alle Sandboxes) — **nicht** deklarativ im Kit.
+Ein früherer Versuch, das per `permissions.network.allow` direkt in `spec.yaml` zu setzen, scheiterte
+am echten `sbx` mit `field permissions not found in type spec.SpecFile` — dieses Feld existiert in
+der installierten sbx-Version nicht. Das Kit ist aktuell entsprechend auf reine Metadaten reduziert.
 
 Wie das Secret wirkt (Platzhalter-Mechanismus, siehe [docs.docker.com – Custom Secrets](https://docs.docker.com/reference/cli/sbx/secret/set-custom/)):
 Die Sandbox sieht in `$SP_REST_TOKEN` nur einen **Platzhalter**, nicht den echten Token. Erst wenn
@@ -92,7 +100,7 @@ Beides in Schritt 6/7 der [TODO.md](./TODO.md) mit der echten Sandbox verifizier
 den `--host`-Wert tauschen bzw. den `secret set-custom`-Befehl erneut ausführen.
 
 Kein zweiter Mount-Pfad nötig (anders als beim alten Ansatz) — die REST API braucht kein
-gemountetes Host-Verzeichnis, nur die Netzwerkfreigabe aus dem Kit.
+gemountetes Host-Verzeichnis, nur die Netzwerkfreigabe per `sbx policy allow network` oben.
 
 Nach dem Start: `/mcp` zeigt (noch) keinen Server, da noch keiner registriert ist — das ist für
 den aktuellen Schritt (Konnektivitätstest) erwartet und normal. `echo $SP_REST_TOKEN` in der
