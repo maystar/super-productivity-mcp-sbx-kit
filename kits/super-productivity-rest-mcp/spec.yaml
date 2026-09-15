@@ -1,0 +1,26 @@
+schemaVersion: "1"
+kind: mixin
+name: super-productivity-rest-mcp
+displayName: Super Productivity REST API Access
+description: >-
+  Gibt der Sandbox Netzwerkzugriff auf die Super Productivity Local REST API,
+  die auf dem Host unter 127.0.0.1:3876 läuft (erreicht via host.docker.internal).
+  Aktueller Stand: reine Netzwerkfreigabe zum Verifizieren der Erreichbarkeit.
+  Der eigentliche MCP-Server (der die REST-Endpunkte als Claude-Code-Tools kapselt)
+  ist ein noch folgender Ausbauschritt, siehe TODO.md.
+
+# ⚠️ UNVERIFIZIERT (von einem Agenten ohne sbx-Zugriff erstellt/geplant — wird in
+# Schritt 6 der TODO.md mit einer echten Sandbox getestet):
+# Die Docker-Sandboxes-Kit-Referenz (docs.docker.com/ai/sandboxes/customize/kit-reference.md)
+# dokumentiert `permissions.network.allow` mit einem Beispiel-Eintrag im Format
+# "host.docker.internal:<port>". Ein früherer Testaufruf (curl http://host.docker.internal:3876
+# aus einer anderen, unabhängigen Sandbox heraus) wurde von der Netzwerk-Policy jedoch als
+# Domain "localhost:3876" geloggt/geblockt — nicht als "host.docker.internal:3876". Unklar,
+# welcher Name intern tatsächlich gegen die Allow-Liste gematcht wird. Deshalb sind unten
+# beide Varianten eingetragen; nach dem ersten echten Test (Schritt 6) auf die tatsächlich
+# wirksame Variante kürzen.
+permissions:
+  network:
+    allow:
+      - host.docker.internal:3876
+      - localhost:3876
