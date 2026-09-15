@@ -44,11 +44,34 @@ permissions:
 # durchgereicht, da der Container sonst keinen Zugriff auf host.docker.internal über den
 # sbx-Proxy hätte.
 #
-# ⚠️ Noch nicht End-to-End getestet: Ob dieser `setup.startup`-Block bei einem echten `sbx run`
-# (frische Sandbox) tatsächlich wie hier angenommen ausgeführt wird. Vor dem nächsten `sbx run`
-# idealerweise einmal gegenprüfen.
+# Schritt 10 (2026-09-15) — Rennen zwischen Registrierung und Agent-Start behoben:
+# Beobachtet und reproduziert: In einer frischen Sandbox fand die zuerst gestartete Claude-Code-
+# Session den MCP-Server nicht, obwohl `setup.startup` kurz danach erfolgreich durchlief und
+# `claude mcp list` in einer NEUEN Session ihn als "✔ Connected" zeigte. Root Cause, verifiziert
+# gegen docs.docker.com/ai/sandboxes/customize/kit-reference/ (2026-09-15): "the agent launches
+# once startup commands have been dispatched, regardless of `background`. A value of `false`
+# waits within the startup dispatcher before it runs the next command; it doesn't delay the agent
+# entrypoint." — der primäre Agent-Prozess wartet also NIE auf `setup.startup`, unabhängig vom
+# `background`-Feld. Das ursprüngliche Skript hat das Rennfenster zusätzlich unnötig vergrößert,
+# indem es vor der Registrierung erst `docker pull` ausführte — gemessen (gleiche Sandbox):
+# `claude mcp add` allein ~1s, ein kalter `docker pull` dagegen ~7s (beim allerersten Pull mit
+# leerem Cache eher mehr, s. Setup-Log mit vollem Layer-Download).
+#
+# Fix, zweigleisig:
+# 1. Die eigentliche Registrierung läuft jetzt zusätzlich unter `setup.install` — laut Doku läuft
+#    das "synchronously when a kit is applied ... during sandbox creation", der Agent startet
+#    nachweislich erst danach. Das schließt das Rennen für die allererste Session einer neuen
+#    Sandbox vollständig.
+# 2. `setup.startup` bleibt bestehen (Selbstheilung bei jedem weiteren Neustart, z. B. falls
+#    `~/.claude.json` doch mal fehlt, und um das Image aktuell zu halten) — dort aber jetzt
+#    Registrierung VOR dem Pull, um das laut Doku grundsätzlich nicht eliminierbare Rennen bei
+#    späteren Neustarts wenigstens auf die ~1s der reinen `claude mcp add`-Ausführung zu verkürzen
+#    statt der ~7+s des vorgeschalteten Pulls.
+# ⚠️ Noch nicht in einem frischen `sbx run` End-to-End verifiziert (nur die einzelnen Befehle
+# manuell in der laufenden Sandbox) — vor dem nächsten `sbx run` idealerweise gegenprüfen, ob
+# schon die allererste Session `claude mcp list` den Server zeigt.
 setup:
-  startup:
+  install:
     - command:
         - sh
         - -c
@@ -56,10 +79,10 @@ setup:
           set -u
           exec >>"$HOME/.cache/super-productivity-mcp-setup.log" 2>&1
           mkdir -p "$HOME/.cache"
-          printf '=== %s ===\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          printf '=== install %s ===\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
           export PATH="$HOME/.local/bin:$HOME/.claude/local:$PATH"
           IMAGE="ghcr.io/maystar/super-productivity-rest-mcp:latest"
-          docker pull "$IMAGE" || { echo "FEHLER: docker pull fehlgeschlagen"; exit 0; }
+          docker pull "$IMAGE" || echo "WARNUNG: docker pull (install) fehlgeschlagen, docker run zieht bei Bedarf selbst"
           claude mcp remove super-productivity --scope user >/dev/null 2>&1 || true
           claude mcp add super-productivity --scope user -- \
             docker run -i --rm \
@@ -68,7 +91,31 @@ setup:
               -e http_proxy -e https_proxy -e no_proxy \
               -e NODE_USE_ENV_PROXY \
               "$IMAGE" \
-            || echo "FEHLER: claude mcp add fehlgeschlagen"
+            || echo "FEHLER: claude mcp add (install) fehlgeschlagen"
       user: "1000"
       background: false
-      description: "Super-Productivity-MCP-Server-Image ziehen und user-scoped registrieren"
+      description: "MCP-Server einmalig bei Sandbox-Erstellung registrieren (Agent wartet auf install, s. Kommentar oben)"
+  startup:
+    - command:
+        - sh
+        - -c
+        - |
+          set -u
+          exec >>"$HOME/.cache/super-productivity-mcp-setup.log" 2>&1
+          mkdir -p "$HOME/.cache"
+          printf '=== startup %s ===\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          export PATH="$HOME/.local/bin:$HOME/.claude/local:$PATH"
+          IMAGE="ghcr.io/maystar/super-productivity-rest-mcp:latest"
+          claude mcp remove super-productivity --scope user >/dev/null 2>&1 || true
+          claude mcp add super-productivity --scope user -- \
+            docker run -i --rm \
+              -e SP_REST_TOKEN -e SP_REST_BASE_URL \
+              -e HTTP_PROXY -e HTTPS_PROXY -e NO_PROXY \
+              -e http_proxy -e https_proxy -e no_proxy \
+              -e NODE_USE_ENV_PROXY \
+              "$IMAGE" \
+            || echo "FEHLER: claude mcp add (startup) fehlgeschlagen"
+          docker pull "$IMAGE" || echo "WARNUNG: docker pull (startup) fehlgeschlagen, docker run zieht bei Bedarf selbst"
+      user: "1000"
+      background: false
+      description: "MCP-Server bei jedem weiteren Sandbox-Start auffrischen (Registrierung vor dem Pull, s. Kommentar oben)"

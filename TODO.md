@@ -205,6 +205,31 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
       - **Noch nicht End-to-End getestet:** der neue `setup.startup`-Block in einem frischen
         `sbx run` (nur manuell in der laufenden Sandbox nachvollzogen, s. o.) — gleiche
         Einschränkung wie schon bei Schritt 7 vermerkt.
+- [x] **10. Rennen zwischen MCP-Registrierung und Agent-Start behoben** (2026-09-15) — Nutzer
+      meldete: In einer frischen Sandbox fand die zuerst gestartete Claude-Code-Session den
+      MCP-Server nicht (`claude mcp list` zeigte ihn nicht/nicht verbunden); nach einem Neustart
+      (neue Session) war er da. Reproduziert und Root Cause verifiziert gegen
+      `docs.docker.com/ai/sandboxes/customize/kit-reference/`: der primäre Agent-Prozess wartet
+      **grundsätzlich nicht** auf `setup.startup` — Zitat: *"the agent launches once startup
+      commands have been dispatched, regardless of `background`. A value of `false` waits within
+      the startup dispatcher before it runs the next command; it doesn't delay the agent
+      entrypoint."* Das Rennfenster war zudem unnötig groß, weil das Skript vor der Registrierung
+      erst `docker pull` ausführte — gemessen (gleiche Sandbox): `claude mcp add` allein ~1s, ein
+      kalter `docker pull` dagegen ~7s (beim allerersten Pull mit leerem Cache eher mehr, s.
+      Setup-Log aus Schritt 9 mit vollem Layer-Download).
+      - **Fix, zweigleisig:**
+        1. Registrierung zusätzlich unter `setup.install` — läuft laut Doku *"synchronously when
+           a kit is applied ... during sandbox creation"*, der Agent startet nachweislich erst
+           danach. Schließt das Rennen für die allererste Session einer neuen Sandbox vollständig.
+        2. `setup.startup` bleibt bestehen (Selbstheilung bei jedem weiteren Neustart, Image
+           aktuell halten), jetzt aber mit Registrierung **vor** dem Pull — verkürzt das laut Doku
+           grundsätzlich nicht eliminierbare Rennen bei späteren Neustarts von ~7+s auf ~1s.
+      - Beide Skript-Varianten (`install`- und `startup`-Reihenfolge) einzeln in der laufenden
+        Sandbox durchgespielt: `claude mcp list` zeigt danach weiterhin `✔ Connected`.
+      - **Noch nicht End-to-End getestet:** ob die allererste Session eines frischen `sbx run`
+        den Server jetzt tatsächlich sofort sieht (nur die einzelnen Befehle isoliert verifiziert,
+        nicht der volle `setup.install`-Ablauf beim echten Sandbox-Erstellen) — vor dem nächsten
+        `sbx run` gegenprüfen.
 
 ---
 

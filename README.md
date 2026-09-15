@@ -34,9 +34,11 @@ Mit dem hier definierten Kit (`kits/super-productivity-rest-mcp`) kann eine Sand
   task-control, Status, Focus-Mode, Projekte, Tags) — **verifiziert am 2026-09-14** per Testclient
   gegen die echte, laufende Super-Productivity-Instanz (u. a. reale Task-Liste mit 39 Einträgen
   abgerufen). Der Server ist zusätzlich user-scoped in `~/.claude.json` der Sandbox registriert und
-  wird beim Sandbox-Start automatisch registriert (`docker pull` + `claude mcp add ... -- docker
-  run ...` in `setup.startup` in spec.yaml) — dieser automatisierte Teil ist noch nicht in einem
-  frischen `sbx run` getestet, siehe TODO.md Schritt 7/9.
+  wird sowohl bei Sandbox-Erstellung (`setup.install`, blockiert den Agent-Start — schließt ein
+  früher beobachtetes Rennen aus, bei dem die erste Session den Server noch nicht fand) als auch
+  bei jedem weiteren Start (`setup.startup`, nicht blockierend) per `docker pull` + `claude mcp
+  add ... -- docker run ...` registriert — dieser Automatismus ist noch nicht in einem frischen
+  `sbx run` End-to-End getestet, siehe TODO.md Schritt 7/9/10.
 
 **Erledigt (TODO.md Schritt 8+9):** Der MCP-Server-Code lebt jetzt als eigenständiges Projekt unter
 [../super-productivity-rest-mcp/](../super-productivity-rest-mcp/), auf GitHub veröffentlicht und
@@ -99,10 +101,11 @@ auch nicht in der Shell-History.
 Kein zweiter Mount-Pfad nötig (anders als beim alten Ansatz) — die REST API braucht kein
 gemountetes Host-Verzeichnis, nur die Netzwerkfreigabe aus dem Kit.
 
-Nach dem Start: Das Kit zieht das Container-Image und registriert den MCP-Server automatisch
-(`setup.startup`, siehe spec.yaml) — `claude mcp list` sollte `super-productivity: ... - ✔ Connected` zeigen, `/mcp`
-in einer **neu gestarteten** Claude-Code-Session entsprechend die 16 Tools (eine bereits laufende
-Session sieht neu registrierte Server nicht automatisch). `echo $SP_REST_TOKEN` in der Sandbox
+Bereits bei der Sandbox-Erstellung (`setup.install`, blockierend) zieht das Kit das Container-Image
+und registriert den MCP-Server — die allererste Session sollte ihn also schon sehen. Bei jedem
+weiteren Sandbox-Start wird das über `setup.startup` (nicht blockierend) aufgefrischt.
+`claude mcp list` sollte `super-productivity: ... - ✔ Connected` zeigen, `/mcp`
+in der Claude-Code-Session entsprechend die 16 Tools. `echo $SP_REST_TOKEN` in der Sandbox
 zeigt weiterhin nur den Platzhalter aus Schritt 2 (nicht leer, aber auch nicht der echte Token —
 das ist beabsichtigt, siehe oben).
 
@@ -111,9 +114,10 @@ das ist beabsichtigt, siehe oben).
 ## Weiteres Vorgehen
 
 Siehe [TODO.md](./TODO.md) für den vollständigen Plan und Verifikationsstand. Offen:
-- Schritt 7/9 (MCP-Server): den `setup.startup`-Automatismus (jetzt `docker pull` + `docker run`)
-  einmal in einem frischen `sbx run` bestätigen, und die Tools in einer neu gestarteten
-  Claude-Code-Session (nicht nur per Testclient) selbst aufrufen.
+- Schritt 7/9/10 (MCP-Server): den `setup.install`+`setup.startup`-Automatismus einmal in einem
+  frischen `sbx run` bestätigen — insbesondere, dass schon die allererste Session den Server
+  sieht (das war der Grund für Schritt 10) — und die Tools in dieser Session (nicht nur per
+  Testclient) selbst aufrufen.
 
 Für Schritt 7 liegt die API-Referenz (Endpunkte, Felder, Fehlercodes) bereits lokal vor:
 [docs/rest-api-reference.md](./docs/rest-api-reference.md).
