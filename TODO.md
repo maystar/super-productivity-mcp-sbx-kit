@@ -260,6 +260,46 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
       Tag korrekt, `claude mcp list` weiterhin `✔ Connected`. Weiterhin **nicht getestet:** ein
       echter `sbx run` mit dieser korrigierten spec.yaml (YAML-Syntax lokal validiert, aber ohne
       `sbx`-Binary in dieser Sandbox nicht gegen das reale Schema geprüft).
+- [x] **13. Zweite, härtere Rennen-Variante gefunden und behoben** (2026-09-16) — Nutzer meldete
+      nach Schritt 12 (frische Sandbox mit korrigiertem `spec.yaml`, aber nur `claude` neu
+      gestartet, nicht die Sandbox selbst): MCP-Server weiterhin nicht erreichbar. Diagnose in der
+      betroffenen Sandbox:
+      - `files/home/.super-productivity-mcp/setup.sh` war korrekt nach `/home/agent/...` kopiert.
+      - Setup-Log zeigte **beide** Phasen erfolgreich (`install` um 22:39:45 UTC, `startup` nur 4s
+        später um 22:39:49 UTC — auf einer echten Sandbox-Erstellung feuern also offenbar beide,
+        nicht nur `install`).
+      - Trotzdem: `claude mcp list` zeigte den Server **nicht**, `~/.claude.json`s
+        `mcpServers`-Block enthielt nur noch `mcp-gateway` (den eingebauten Gateway-Server), nicht
+        `super-productivity`. `stat` zeigte: `~/.claude.json` wurde **36s nach** dem letzten
+        Setup-Log-Eintrag nochmal komplett neu geschrieben — von der Top-Level-Struktur her klar
+        durch den `claude`-Prozess selbst (Keys wie `numStartups`, `hasCompletedOnboarding`,
+        `firstStartTime`, diverse Caches — kein sbx-/Kit-Mechanismus).
+      - Gegenprobe: manuelle Neu-Registrierung **nach** dem Boot (Sandbox längst hochgefahren)
+        blieb auch nach 60s stabil — also kein dauerhaftes Reconciling, sondern ein einmaliges
+        Ereignis kurz nach dem Boot.
+      - **Root Cause identifiziert:** Das Skript machte bis dahin immer `claude mcp remove` **vor**
+        `claude mcp add` (nötig, weil `claude mcp add` mit "already exists" fehlschlägt, wenn der
+        Server schon registriert ist — per `claude mcp add --help`/Test bestätigt). Zwischen
+        `remove` und `add` gibt es eine kurze Lücke, in der `~/.claude.json` **keinen**
+        `super-productivity`-Eintrag hat. Fällt der erste Start-Read der frisch startenden
+        interaktiven Agent-Session in genau diese Lücke, übernimmt sie diesen Stand ins eigene
+        In-Memory-Modell — und schreibt ihn bei ihrem ersten eigenen Housekeeping-Save (s. o.)
+        wieder auf die Platte, unabhängig davon, dass unser `add` kurz danach erfolgreich war.
+        Der redundante zweite Lauf (`startup`, 4s nach `install`, obwohl schon alles registriert
+        war) war der eigentliche Auslöser, weil er genau in dem Moment lief, in dem die Session
+        hochfuhr.
+      - **Fix:** `remove` nur noch aufrufen, wenn er nötig ist — `setup.sh` prüft jetzt per
+        `claude mcp get super-productivity`, ob der Server schon registriert ist, und ruft `add`
+        **nur** auf, wenn das fehlschlägt. Kein `remove` mehr im Normalfall, also auch keine
+        Lücke mehr bei jedem weiteren Start. Der allererste `add` (in `setup.install`) war ohnehin
+        nie von einem `remove` begleitet und blockiert den Agenten-Start vollständig, hat also
+        von vornherein keine Lücke.
+      - Verifiziert lokal: Skript zweimal hintereinander aufgerufen (simuliert `install` dann
+        `startup`) — zweiter Lauf erkennt "already registered, leaving it as-is", keine
+        Neuregistrierung, `claude mcp list` weiterhin `✔ Connected`.
+      - **Noch nicht getestet:** ob dieser Fix das Problem in einer echten frischen Sandbox
+        tatsächlich behebt (nur das Skript isoliert verifiziert, nicht der volle `sbx run`-Ablauf
+        mit einer echten, erstmalig startenden interaktiven Session).
 
 ---
 
