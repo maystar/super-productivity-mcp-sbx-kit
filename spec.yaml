@@ -21,10 +21,6 @@ setup:
   # mechanism: https://docs.docker.com/ai/sandboxes/customize/kits/). Called with an explicit
   # interpreter (`sh`) so the copied file's default 0644 permissions are enough — no chmod needed.
   #
-  # Both entries run as root (user "0") because setup.sh writes to /etc/claude-code/ (Claude
-  # Code's managed-mcp.json mechanism — see setup.sh's header comment for why this replaced the
-  # earlier ~/.claude.json-mutating approach, and TODO.md steps 10/13/14 for the history).
-  #
   # Note the schema difference between the two: setup.install's `command` is a single shell
   # string (passed to `sh -c`, no `background` field, default user "0"); setup.startup's `command`
   # is an argv list (no shell parsing) and does support `background`. Mixing these up produces
@@ -35,7 +31,7 @@ setup:
   # session starts, so that session already sees the registered MCP server.
   install:
     - command: "sh /home/agent/.super-productivity-mcp/setup.sh install"
-      user: "0"
+      user: "1000"
       description: "Register the MCP server once, during sandbox creation"
   # Runs on every subsequent sandbox start, to self-heal and keep the image current. The agent
   # never waits for this to finish (see setup.sh's header comment), unlike setup.install above.
@@ -44,6 +40,6 @@ setup:
         - sh
         - /home/agent/.super-productivity-mcp/setup.sh
         - startup
-      user: "0"
+      user: "1000"
       background: false
       description: "Re-register the MCP server on every subsequent sandbox start"

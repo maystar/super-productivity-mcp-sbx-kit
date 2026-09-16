@@ -300,8 +300,7 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
       - **Noch nicht getestet:** ob dieser Fix das Problem in einer echten frischen Sandbox
         tatsächlich behebt (nur das Skript isoliert verifiziert, nicht der volle `sbx run`-Ablauf
         mit einer echten, erstmalig startenden interaktiven Session).
-- [ ] **14. Umstieg auf `managed-mcp.json` (systemweit statt `~/.claude.json`) — in Erprobung**
-      (2026-09-16) — Nutzer wollte grundsätzlich wissen, ob MCP-Registrierung über eine reine
+- [x] **14. Umstieg auf `managed-mcp.json` versucht und wieder verworfen** (2026-09-16) — Nutzer wollte grundsätzlich wissen, ob MCP-Registrierung über eine reine
       Konfigurationsdatei statt per `claude mcp add`-Laufzeitaufruf möglich ist (Motivation: Schritt
       13s Fix reduziert das Rennen, eliminiert es aber nicht strukturell — jede Mutation von
       `~/.claude.json` zur Laufzeit bleibt riskant, solange der `claude`-Prozess dieselbe Datei
@@ -346,13 +345,38 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
       - Verifiziert (ohne den blockierten `/etc/claude-code`-Zugriff): Skript-Logik per
         sed-Umleitung in ein Temp-Verzeichnis statt `/etc/claude-code` durchgespielt — beide
         generierten JSON-Dateien sind syntaktisch valide und enthalten die erwarteten Werte.
-      - **Ausdrücklich offen/ungetestet:** ob `mcp-gateway` und `claude.ai Trello` mit
-        `managed-mcp.json` + `allowAllClaudeAiMcps` tatsächlich weiterlaufen, und ob der ganze
-        `setup.install`/`setup.startup`-Ablauf als root in einer echten frischen Sandbox
-        funktioniert. Nutzer testet das nächste mal per normalem `sbx run` mit diesem Kit-Stand;
-        `claude mcp list` danach prüfen (insbesondere `mcp-gateway`, `claude.ai Trello`,
-        `super-productivity`) und ob `claude mcp add ...` mit dem erwarteten
-        "exclusive control"-Fehler abgelehnt wird.
+      - **Live-Test in einer echten frischen Sandbox (Nutzer, `sbx run`):**
+        ```
+        claude.ai Trello: https://mcp.trello.com/v1 - ! Needs authentication
+        super-productivity: docker run ... - ✔ Connected
+        ```
+        `super-productivity` lief sofort ohne Trust-Prompt, `Trello` überlebte dank
+        `allowAllClaudeAiMcps`. Aber: **`mcp-gateway` fehlte komplett** in der Liste.
+      - **Root Cause geklärt (Nutzer-Nachfrage: "über welchen Weg wird mcp-gateway gesetzt?"):**
+        `claude mcp get mcp-gateway` (in dieser Arbeits-Sandbox, wo `managed-mcp.json` nie aktiv
+        war) zeigt `Scope: User config (available in all your projects)` — **derselbe simple
+        `claude mcp add --scope user`-Mechanismus** wie unser alter `super-productivity`-Ansatz,
+        nur von der Sandbox-Basis-Provisionierung selbst ausgeführt (nutzt die vorhandenen
+        Env-Vars `MCP_GATEWAY_URL`/`MCP_SENTINEL_TOKEN_NAME=proxy-managed` für URL/Header). Keine
+        "in-process"/CLI-eingebaute Sonderrolle, also **nicht** von `managed-mcp.json`s
+        Exklusivität ausgenommen — passt exakt zum beobachteten Ausfall.
+      - **Konsequenz:** `managed-mcp.json` würde nicht nur einen Sonderfall brechen, sondern
+        **jeden** Server, den die Sandbox-Plattform selbst auf die übliche Art registriert — für
+        ein schlankes Produktivitäts-Kit zu riskant/greifend. **Verworfen.**
+      - **Revert durchgeführt:** `spec.yaml` und `files/home/.super-productivity-mcp/setup.sh` auf
+        den Stand vor Schritt 14 zurückgesetzt (Commit `6fd4882`, Schritt 13s `~/.claude.json`
+        + `claude mcp get`-Check-Ansatz), `user: "1000"` statt `"0"` (kein Root mehr nötig, kein
+        `/etc/claude-code`-Zugriff mehr). Kommentar in `setup.sh` ergänzt, der explizit auf diesen
+        Abschnitt verweist, damit ein künftiger Versuch nicht denselben Weg wiederholt, ohne die
+        Begründung zu kennen. Lokal erneut verifiziert: `install` dann `startup` durchlaufen,
+        `claude mcp list` zeigt `mcp-gateway`, `claude.ai Trello` und `super-productivity`
+        (`✔ Connected`) alle wie erwartet nebeneinander.
+      - **Fazit für künftige Versuche in diese Richtung:** ein systemweiter, projektunabhängiger,
+        Trust-Prompt-freier Weg für stdio-MCP-Server existiert in Claude Code aktuell nur über
+        `managed-mcp.json`, und der ist für diesen Zweck strukturell ungeeignet (exklusive
+        Kontrolle). Bleibt offen als mögliche Alternative, falls später doch noch gewünscht:
+        Projekt-Scope `.mcp.json` (Schritt 14s erste Recherche-Option) — sicher, aber an das
+        Sandbox-Workdir gebunden.
 
 ---
 
