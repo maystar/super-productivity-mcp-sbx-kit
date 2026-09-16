@@ -300,6 +300,59 @@ selbst nachladen, was zusätzliche Netzwerkfreigabe für `github.com` bräuchte)
       - **Noch nicht getestet:** ob dieser Fix das Problem in einer echten frischen Sandbox
         tatsächlich behebt (nur das Skript isoliert verifiziert, nicht der volle `sbx run`-Ablauf
         mit einer echten, erstmalig startenden interaktiven Session).
+- [ ] **14. Umstieg auf `managed-mcp.json` (systemweit statt `~/.claude.json`) — in Erprobung**
+      (2026-09-16) — Nutzer wollte grundsätzlich wissen, ob MCP-Registrierung über eine reine
+      Konfigurationsdatei statt per `claude mcp add`-Laufzeitaufruf möglich ist (Motivation: Schritt
+      13s Fix reduziert das Rennen, eliminiert es aber nicht strukturell — jede Mutation von
+      `~/.claude.json` zur Laufzeit bleibt riskant, solange der `claude`-Prozess dieselbe Datei
+      auch selbst schreibt). Recherche (`code.claude.com/docs/en/mcp`, `.../managed-mcp`,
+      `.../settings-reference`, per Agent + eigenem `WebFetch` gegengeprüft) ergab drei Optionen:
+      - **`.mcp.json`** (Projekt-Scope, im Workdir) — live in dieser Sandbox verifiziert: wird
+        automatisch erkannt (`claude mcp list` zeigt `Scope: Project config (shared via
+        .mcp.json)`), hat aber einen Trust-Prompt (`⏸ Pending approval (run \`claude\` to
+        approve)`), den `-p`-Modus laut Doku und per eigenem Test (`claude -p "..."` listete die
+        Tools des Test-Servers korrekt) umgeht, im interaktiven Modus aber laut Doku erst mit
+        `enableAllProjectMcpServers`/`enabledMcpjsonServers` in `.claude/settings.json`. Sicher,
+        aber an ein Projektverzeichnis gebunden — Nutzer wollte explizit "außerhalb des
+        Projektverzeichnisses".
+      - **`managedMcpServers`** (in `managed-settings.json`) — laut Doku wörtlich nur für
+        **remote** Server: *"The entry has no `command`, `args`, `env`, or `headersHelper`
+        member, so a managed settings document never names a program to run on a user's
+        machine."* Für unseren Docker-/stdio-Server also **nicht** nutzbar.
+      - **`managed-mcp.json`** (System-Pfad `/etc/claude-code/managed-mcp.json` unter Linux) —
+        unterstützt volle stdio-Server (command/args/env, gleiches Schema wie `.mcp.json`), liegt
+        systemweit außerhalb jedes Projekts, kein Trust-Prompt. Haken laut Doku: **exklusive
+        Kontrolle** — sobald die Datei existiert, lädt Claude Code *nur noch* die dort gelisteten
+        Server (plus fest eingebaute "in-process"-Server wie vermutlich dieser Sandbox
+        `mcp-gateway`) und blockt jedes weitere `claude mcp add` mit *"Cannot add MCP server:
+        enterprise MCP configuration is active..."*. `claude.ai`-Connectoren (z. B. `Trello`)
+        werden dabei ebenfalls unterdrückt, außer man setzt zusätzlich `"allowAllClaudeAiMcps":
+        true` in einer weiteren `/etc/claude-code/managed-settings.json`.
+      - **Live-Testversuch in dieser Sandbox scheiterte an einer Sicherheits-Schranke:**
+        `sudo tee /etc/claude-code/managed-mcp.json` wurde vom Claude-Code-Auto-Mode-Classifier
+        mit "Self-Modification" blockiert (folgerichtig — es ist die Config der gerade laufenden
+        Session selbst). Ob `mcp-gateway`/`Trello` das wirklich überleben, ist damit **nicht**
+        aus dieser Sandbox heraus verifizierbar.
+      - **Nutzerentscheidung:** trotz des ungetesteten Risikos `managed-mcp.json` ausprobieren,
+        und zwar direkt über das Kit (nicht mehr manuell) — Nutzer will einfach eine neue Sandbox
+        erstellen und dort prüfen, statt Befehle von Hand einzutippen.
+      - **Umsetzung:** `files/home/.super-productivity-mcp/setup.sh` schreibt jetzt
+        `/etc/claude-code/managed-mcp.json` (unser Server) und `/etc/claude-code/managed-settings.json`
+        (`allowAllClaudeAiMcps: true`) statt `claude mcp add`/`get` aufzurufen — kein
+        `~/.claude.json`-Zugriff mehr, damit strukturell **kein** Rennen mehr mit dem
+        Housekeeping-Save des Agenten möglich (Claude Code liest `managed-mcp.json` nur, schreibt
+        es nie selbst). `spec.yaml`s `install`/`startup`-Einträge laufen jetzt als `user: "0"`
+        (root), weil `/etc/claude-code/` Root-Rechte braucht.
+      - Verifiziert (ohne den blockierten `/etc/claude-code`-Zugriff): Skript-Logik per
+        sed-Umleitung in ein Temp-Verzeichnis statt `/etc/claude-code` durchgespielt — beide
+        generierten JSON-Dateien sind syntaktisch valide und enthalten die erwarteten Werte.
+      - **Ausdrücklich offen/ungetestet:** ob `mcp-gateway` und `claude.ai Trello` mit
+        `managed-mcp.json` + `allowAllClaudeAiMcps` tatsächlich weiterlaufen, und ob der ganze
+        `setup.install`/`setup.startup`-Ablauf als root in einer echten frischen Sandbox
+        funktioniert. Nutzer testet das nächste mal per normalem `sbx run` mit diesem Kit-Stand;
+        `claude mcp list` danach prüfen (insbesondere `mcp-gateway`, `claude.ai Trello`,
+        `super-productivity`) und ob `claude mcp add ...` mit dem erwarteten
+        "exclusive control"-Fehler abgelehnt wird.
 
 ---
 
