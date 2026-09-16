@@ -25,14 +25,19 @@ With the kit defined by [spec.yaml](./spec.yaml), a sandbox can:
 ## Starting a sandbox with this kit
 
 ```bash
-read -rp "Sandbox name [sp-rest-mcp]: " SBX_NAME
-SBX_NAME="${SBX_NAME:-sp-rest-mcp}"
-read -rsp "Super Productivity access token: " SP_TOKEN
-echo
+bash -c '
+  read -rp "Sandbox name [sp-rest-mcp]: " SBX_NAME
+  SBX_NAME="${SBX_NAME:-sp-rest-mcp}"
+  read -rp "Working directory: " WORKDIR
+  read -rsp "Super Productivity access token: " SP_TOKEN
+  echo
 
-sbx secret set-custom --sandbox "$SBX_NAME" --host localhost --env SP_REST_TOKEN --value "$SP_TOKEN"
+  sbx secret set-custom --sandbox "$SBX_NAME" --host localhost --env SP_REST_TOKEN --value "$SP_TOKEN"
 
-sbx run claude --name "$SBX_NAME" --kit <kit directory> <working directory>
+  sbx run claude --name "$SBX_NAME" \
+    --kit "git+https://github.com/maystar/super-productivity-mcp-sbx-kit.git" \
+    "$WORKDIR"
+'
 ```
 
 The sandbox only ever sees a placeholder for `SP_REST_TOKEN`; the sbx proxy substitutes the real
