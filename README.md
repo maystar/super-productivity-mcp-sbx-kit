@@ -32,8 +32,7 @@ echo
 
 sbx secret set-custom --sandbox "$SBX_NAME" --host localhost --env SP_REST_TOKEN --value "$SP_TOKEN"
 
-cd /home/fabian/claude-workspace/super-productivity
-sbx run claude --name "$SBX_NAME" --kit . .
+sbx run claude --name "$SBX_NAME" --kit <kit directory> <working directory>
 ```
 
 The sandbox only ever sees a placeholder for `SP_REST_TOKEN`; the sbx proxy substitutes the real
