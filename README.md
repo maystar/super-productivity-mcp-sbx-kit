@@ -44,6 +44,3 @@ The sandbox only ever sees a placeholder for `SP_REST_TOKEN`; the sbx proxy subs
 token when a request actually reaches the host, so the token is never stored in plaintext in this
 repo or the sandbox filesystem.
 
-## Further reading
-
-See [TODO.md](./TODO.md) for the full plan and current status.
