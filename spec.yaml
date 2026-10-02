@@ -6,7 +6,8 @@ description: >-
   Gives the sandbox network access to the Super Productivity Local REST API running on the host
   at 127.0.0.1:3876 (reached via host.docker.internal), and registers the MCP server from the
   published container image ghcr.io/maystar/super-productivity-rest-mcp, which wraps the REST
-  endpoints as Claude Code tools.
+  endpoints as Claude Code tools. The access token is a global service secret
+  ("sbx secret set super-productivity") that the proxy injects as a Bearer header.
 
 permissions:
   network:
@@ -14,6 +15,27 @@ permissions:
       - host.docker.internal:3876
       - localhost:3876
       - ghcr.io:443
+
+# Access token of the Local REST API as a service secret, stored on the host with
+# "sbx secret set super-productivity" (global by default, so it survives "sbx rm"). The proxy
+# injects it only into sandboxes using this kit and only for the domains below. In the sandbox,
+# SP_REST_TOKEN holds just the placeholder "proxy-managed"; the MCP server sends it as
+# "Authorization: Bearer ..." and the proxy replaces that header with the real token. Every
+# inject domain must also be allowed in permissions.network above.
+credentials:
+  - service: super-productivity
+    description: "Access token of the Super Productivity Local REST API (Settings -> Misc)"
+    required: true
+    apiKey:
+      name: SP_REST_TOKEN
+      proxyManaged: true
+      inject:
+        - domain: host.docker.internal
+          header: Authorization
+          format: "Bearer %s"
+        - domain: localhost
+          header: Authorization
+          format: "Bearer %s"
 
 setup:
   # The actual registration logic lives in files/home/.super-productivity-mcp/setup.sh (copied to

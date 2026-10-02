@@ -24,23 +24,38 @@ With the kit defined by [spec.yaml](./spec.yaml), a sandbox can:
 
 ## Starting a sandbox with this kit
 
+Store the access token once as a global service secret (interactive prompt, so the token stays
+out of shell history):
+
 ```bash
-bash -c '
-  read -rp "Sandbox name [sp-rest-mcp]: " SBX_NAME
-  SBX_NAME="${SBX_NAME:-sp-rest-mcp}"
-  read -rp "Working directory: " WORKDIR
-  read -rsp "Super Productivity access token: " SP_TOKEN
-  echo
-
-  sbx secret set-custom --sandbox "$SBX_NAME" --host localhost --env SP_REST_TOKEN --value "$SP_TOKEN"
-
-  sbx run claude --name "$SBX_NAME" \
-    --kit "git+https://github.com/maystar/super-productivity-mcp-sbx-kit.git" \
-    "$WORKDIR"
-'
+sbx secret set super-productivity
 ```
 
-The sandbox only ever sees a placeholder for `SP_REST_TOKEN`; the sbx proxy substitutes the real
-token when a request actually reaches the host, so the token is never stored in plaintext in this
-repo or the sandbox filesystem.
+Then start a sandbox with the kit:
+
+```bash
+sbx run claude --name sp-rest-mcp \
+  --kit "git+https://github.com/maystar/super-productivity-mcp-sbx-kit.git" \
+  <working-directory>
+```
+
+On the first run, sbx asks once whether the `super-productivity` secret may be sent to the
+domains the kit declares (`host.docker.internal`, `localhost`). The approval, not the token, is
+stored in `~/.config/sbx/credentials.yaml`.
+
+The sandbox only ever sees the placeholder `proxy-managed` in `SP_REST_TOKEN`; the sbx proxy
+replaces the `Authorization: Bearer` header with the real token when a request reaches the host,
+so the token is never stored in plaintext in this repo or the sandbox filesystem. Because the
+secret is global, it survives `sbx rm` and is reused by every new sandbox with this kit. To
+replace it (e.g. after regenerating the token in Super Productivity), run
+`sbx secret set super-productivity` again.
+
+### Migrating from the custom secret
+
+Earlier versions of this README used a sandbox-scoped custom secret
+(`sbx secret set-custom --sandbox <name> --host localhost --env SP_REST_TOKEN`). It is removed
+together with its sandbox by `sbx rm`, so recreate existing sandboxes after storing the service
+secret. If you set such a custom secret globally (without `--sandbox`), check with
+`sbx secret ls -g` and remove it, otherwise it can collide with the service secret on
+`SP_REST_TOKEN`.
 
