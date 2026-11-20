@@ -67,6 +67,10 @@ capabilities:
   # request dockerd@1 itself. Declaring it here asks the runtime to start it. It counts as
   # privileged, so sbx asks for consent when the sandbox is created.
   - type: com.docker.sandbox/dockerd@1
+    # optional: some sbx versions reject dockerd@1 as an "unsupported capability type".
+    # The claude image carries the label com.docker.sandboxes.start-docker=true and
+    # starts the daemon by itself, so the kit works either way.
+    optional: true
     description: Runs the Super Productivity MCP server container
 
   # The registration logic lives in setup.sh beside this file. The companion
