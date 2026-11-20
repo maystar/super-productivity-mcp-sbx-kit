@@ -2,8 +2,10 @@
 # Registers the super-productivity MCP server against the published container
 # image (if not already registered) and keeps that image up to date.
 #
-# Called from spec.yaml with a phase tag ("install" or "startup") so the
-# shared log file shows which phase produced each block.
+# Called from the lifecycle@1 hooks in super-productivity-rest-mcp.yaml with a
+# phase tag ("install" or "startup") so the shared log file shows which phase
+# produced each block. The kit's overlay ships this file to
+# /opt/super-productivity-mcp/setup.sh.
 #
 # IMPORTANT: only call `claude mcp add` when the server isn't registered yet.
 # An earlier version unconditionally did `claude mcp remove` followed by
@@ -17,19 +19,22 @@
 # after setup ran had shown as present. `claude mcp add` refuses to touch an
 # existing entry ("already exists"), so skipping the call entirely when one
 # is already there avoids the remove/add gap altogether for every start after
-# the first. The very first ever call (setup.install, which blocks the agent
+# the first. The very first ever call (the install hook, which blocks the agent
 # from starting at all) still does a single plain `add` with no preceding
 # remove, so there's no gap there either.
 #
-# Don't switch this to /etc/claude-code/managed-mcp.json without re-reading TODO.md step 14
-# first: that mechanism was tried and reverted because it takes *exclusive* control of MCP for
-# the whole machine, which silently broke this sandbox's own `mcp-gateway` server (registered the
-# same plain user-scope way as this one, not exempt from that exclusivity).
+# Don't switch this to /etc/claude-code/managed-mcp.json: that mechanism was
+# tried and reverted because it takes *exclusive* control of MCP for the whole
+# machine, which silently broke this sandbox's own `mcp-gateway` server
+# (registered the same plain user-scope way as this one, not exempt from that
+# exclusivity).
 set -u
 
 TAG="${1:-setup}"
-exec >>"$HOME/.cache/super-productivity-mcp-setup.log" 2>&1
+# Create the log directory before redirecting into it: with the order reversed,
+# a missing ~/.cache makes the exec redirect fail and the script abort.
 mkdir -p "$HOME/.cache"
+exec >>"$HOME/.cache/super-productivity-mcp-setup.log" 2>&1
 printf '=== %s %s ===\n' "$TAG" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 export PATH="$HOME/.local/bin:$HOME/.claude/local:$PATH"

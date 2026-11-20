@@ -1,0 +1,109 @@
+# syntax=docker/sandbox-kit:3
+# Migration of the v2 kit "super-productivity-rest-mcp" (formerly spec.yaml at the repo root).
+# The deltas are marked MIGRATION NOTE inline.
+#
+# MIGRATION NOTE: v3 drops the top-level `name:`. A kit's handle is its directory name (for a
+# git source: the `dir=` subdirectory), which is why the kit now lives in
+# super-productivity-rest-mcp/ and this file is named after that directory.
+schemaVersion: "3"
+kind: mixin
+displayName: Super Productivity REST API Access
+description: >-
+  Gives the sandbox network access to the Super Productivity Local REST API running on the host
+  at 127.0.0.1:3876 (reached via host.docker.internal), and registers the MCP server from the
+  published container image ghcr.io/maystar/super-productivity-rest-mcp, which wraps the REST
+  endpoints as Claude Code tools. The access token is a global service secret
+  ("sbx secret set super-productivity") that the proxy injects as a Bearer header.
+version: "2.0.0"
+sourceUrl: https://github.com/maystar/super-productivity-mcp-sbx-kit
+licenses: [MIT]
+
+capabilities:
+  # MIGRATION NOTE: v2 had one flat allow list; v3 grants per phase.
+  # - ghcr.io:443 is reached by `docker pull` in the install hook and again by the startup hook
+  #   and by `docker run` when Claude Code launches the MCP server, so it is in both phases.
+  # - The REST API (host.docker.internal / localhost on 3876) is only used by the MCP server at
+  #   run time.
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      install:
+        allow:
+          - ghcr.io:443
+      runtime:
+        allow:
+          - host.docker.internal:3876
+          - localhost:3876
+          - ghcr.io:443
+
+  # Access token of the Local REST API as a service secret, stored on the host with
+  # "sbx secret set super-productivity" (global by default, so it survives "sbx rm"). The proxy
+  # injects it only into sandboxes using this kit and only for the domains below. In the
+  # sandbox, SP_REST_TOKEN holds just the placeholder "proxy-managed"; the MCP server sends it as
+  # "Authorization: Bearer ..." and the proxy replaces that header with the real token. Every
+  # inject domain must also be allowed in the runtime phase of network-policy@1 above.
+  #
+  # Required, faithfully: v2 declared `required: true`, and without the token every MCP call
+  # fails with 401.
+  - type: com.docker.sandbox/credential@1
+    name: Super Productivity access token
+    description: "Access token of the Super Productivity Local REST API (Settings -> Misc)"
+    config:
+      service: super-productivity
+      phase: runtime
+      apiKey:
+        name: SP_REST_TOKEN
+        proxyManaged: true
+        inject:
+          - domain: host.docker.internal
+            header: Authorization
+            format: "Bearer %s"
+          - domain: localhost
+            header: Authorization
+            format: "Bearer %s"
+
+  # MIGRATION NOTE: new in v3. The MCP server runs as `docker run -i --rm ...`, so the sandbox
+  # needs a running Docker Engine. The v2 claude sandbox started one on its own; the v3 claude
+  # workload ships the engine binaries (dhi.io/sbx-templates:claude-code-docker) but does not
+  # request dockerd@1 itself. Declaring it here asks the runtime to start it. It counts as
+  # privileged, so sbx asks for consent when the sandbox is created.
+  - type: com.docker.sandbox/dockerd@1
+    description: Runs the Super Productivity MCP server container
+
+  # The registration logic lives in setup.sh beside this file. The companion
+  # super-productivity-rest-mcp.dockerfile ships it into the overlay at
+  # /opt/super-productivity-mcp/setup.sh. Called with an explicit interpreter (`sh`), so no
+  # executable bit is needed.
+  #
+  # MIGRATION NOTE: v2 copied the script via the kit's files/ directory to
+  # /home/agent/.super-productivity-mcp/setup.sh. v3 mixins carry content as an image layer
+  # instead; /opt avoids shipping /home or /home/agent directory entries in the overlay (those
+  # must stay owned by root and uid 1000 respectively).
+  #
+  # MIGRATION NOTE: hook environments are deny-by-default in v3. setup.sh itself only reads HOME
+  # and PATH (platform baseline). DOCKER_HOST is declared for the `docker` CLI in case the base
+  # points it at a non-default socket; the proxy variables are declared because the hooks shell
+  # out to `claude` and `docker`, which v2's unrestricted hook environment fed silently.
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      # Runs once, synchronously, during sandbox creation — completes before the agent's first
+      # session starts, so that session already sees the registered MCP server.
+      #
+      # dockerd@1 promises a running engine only for startup hooks, not for install hooks, so
+      # the `docker pull` in this phase may fail; setup.sh only logs a warning then, and the
+      # startup hook pulls again.
+      install:
+        - command: "sh /opt/super-productivity-mcp/setup.sh install"
+          user: "1000"
+          env: [DOCKER_HOST, HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy]
+          description: "Register the MCP server once, during sandbox creation"
+      # Runs on every boot (including create), to self-heal and keep the image current. setup.sh
+      # is idempotent: it only adds the registration when it is missing.
+      startup:
+        - command:
+            - sh
+            - /opt/super-productivity-mcp/setup.sh
+            - startup
+          user: "1000"
+          background: false
+          env: [DOCKER_HOST, HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy]
+          description: "Re-register the MCP server on every boot"
